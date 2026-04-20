@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeadPipeline — Sign In</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#050505;
+    --glass:rgba(255,255,255,0.025);
+    --glass-border:rgba(255,255,255,0.06);
+    --text:#f0f0f0;
+    --text2:rgba(255,255,255,0.4);
+    --accent:#f59e0b;
+    --accent2:#fbbf24;
+    --accent-glow:rgba(245,158,11,0.12);
+    --radius:1.5rem;
+    --ease:cubic-bezier(0.32,0.72,0,1);
+    --font:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;
+  }
+  html{font-size:16px;-webkit-font-smoothing:antialiased}
+  body{
+    font-family:var(--font);background:var(--bg);color:var(--text);
+    min-height:100dvh;display:flex;align-items:center;justify-content:center;
+    overflow:hidden;
+  }
+  .atmosphere{
+    position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:
+      radial-gradient(ellipse 60% 50% at 30% 20%,rgba(245,158,11,0.06),transparent),
+      radial-gradient(ellipse 50% 40% at 70% 70%,rgba(245,158,11,0.03),transparent);
+  }
+  .noise{
+    position:fixed;inset:0;pointer-events:none;z-index:50;opacity:0.02;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size:128px 128px;
+  }
+  .login-shell{
+    position:relative;z-index:1;width:100%;max-width:420px;padding:24px;
+    opacity:0;animation:fadeUp 0.8s var(--ease) 0.1s forwards;
+  }
+  .card-outer{
+    background:rgba(255,255,255,0.015);border:1px solid var(--glass-border);
+    border-radius:var(--radius);padding:5px;
+  }
+  .card-inner{
+    background:var(--glass);border:1px solid rgba(255,255,255,0.03);
+    border-radius:calc(var(--radius) - 5px);padding:40px 32px;
+    text-align:center;
+  }
+  .logo{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:32px}
+  .logo-mark{
+    width:40px;height:40px;border-radius:11px;
+    background:linear-gradient(135deg,var(--accent),#d97706);
+    display:flex;align-items:center;justify-content:center;
+    font-size:14px;font-weight:800;color:#000;
+    box-shadow:0 0 24px var(--accent-glow);
+  }
+  .logo-text{font-size:1.2rem;font-weight:600;letter-spacing:-0.02em}
+  .logo-text span{color:var(--accent)}
+  h1{font-size:1.4rem;font-weight:700;letter-spacing:-0.03em;margin-bottom:8px}
+  .subtitle{font-size:0.85rem;color:var(--text2);margin-bottom:36px;line-height:1.6}
+  .divider{
+    display:flex;align-items:center;gap:16px;margin:28px 0;
+    font-size:0.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.1em;
+  }
+  .divider::before,.divider::after{
+    content:'';flex:1;height:1px;background:var(--glass-border);
+  }
+  .features{
+    text-align:left;margin-top:4px;
+  }
+  .features li{
+    font-size:0.78rem;color:var(--text2);padding:6px 0;
+    display:flex;align-items:center;gap:8px;
+  }
+  .features li::before{content:'✓';color:var(--accent);font-weight:700;font-size:0.7rem}
+  #g_id_onload{display:none}
+  .google-btn-wrap{
+    display:flex;justify-content:center;margin:8px 0;
+  }
+  .error-msg{
+    color:var(--red);font-size:0.78rem;margin-top:12px;display:none;
+  }
+  .footer-text{
+    font-size:0.68rem;color:rgba(255,255,255,0.15);margin-top:24px;
+  }
+  @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+
+<div class="atmosphere"></div>
+<div class="noise"></div>
+
+<div class="login-shell">
+  <div class="card-outer">
+    <div class="card-inner">
+      <div class="logo">
+        <div class="logo-mark">LP</div>
+        <div class="logo-text"><span>Lead</span>Pipeline</div>
+      </div>
+      <h1>Sign in to continue</h1>
+      <p class="subtitle">Find local businesses with bad websites, get their contact info, and close more deals.</p>
+
+      <div class="google-btn-wrap">
+        <div id="g_id_signin"></div>
+      </div>
+
+      <div class="error-msg" id="errorMsg"></div>
+
+      <div class="divider">included free</div>
+
+      <ul class="features">
+        <li>20+ business categories</li>
+        <li>Website quality scoring</li>
+        <li>Email & contact extraction</li>
+        <li>CSV export for outreach</li>
+      </ul>
+
+      <div class="footer-text">By signing in you agree to our terms of service.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Replace with your Google Client ID
+const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
+
+function handleCredentialResponse(response) {
+  fetch('/auth/google', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential: response.credential })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      window.location.href = data.redirect || '/';
+    } else {
+      document.getElementById('errorMsg').textContent = data.error || 'Login failed';
+      document.getElementById('errorMsg').style.display = 'block';
+    }
+  })
+  .catch(err => {
+    document.getElementById('errorMsg').textContent = 'Network error. Try again.';
+    document.getElementById('errorMsg').style.display = 'block';
+  });
+}
+
+window.onload = function() {
+  if (typeof google !== 'undefined' && google.accounts) {
+    google.accounts.id.initialize({
+      client_id: CLIENT_ID,
+      callback: handleCredentialResponse,
+      auto_select: false,
+    });
+    google.accounts.id.renderButton(
+      document.getElementById('g_id_signin'),
+      {
+        theme: 'filled_black',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'pill',
+        width: '280',
+      }
+    );
+  } else {
+    document.getElementById('errorMsg').textContent = 'Google Sign-In failed to load. Check your ad blocker.';
+    document.getElementById('errorMsg').style.display = 'block';
+  }
+};
+</script>
+
+</body>
+</html>

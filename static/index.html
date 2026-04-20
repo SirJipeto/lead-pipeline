@@ -1,0 +1,1739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeadPipeline</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#080808;
+    --glass:rgba(255,255,255,0.025);
+    --glass-border:rgba(255,255,255,0.06);
+    --glass-hover:rgba(255,255,255,0.04);
+    --text:#e8e8ed;
+    --text2:rgba(255,255,255,0.4);
+    --text3:rgba(255,255,255,0.2);
+    --accent:#f59e0b;
+    --accent2:#fbbf24;
+    --accent-glow:rgba(245,158,11,0.12);
+    --accent-subtle:rgba(245,158,11,0.06);
+    --green:#34d399;
+    --green-glow:rgba(52,211,153,0.1);
+    --red:#f87171;
+    --blue:#60a5fa;
+    --radius:1.25rem;
+    --radius-sm:0.75rem;
+    --ease:cubic-bezier(0.32,0.72,0,1);
+    --font:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;
+  }
+  html{font-size:16px;-webkit-font-smoothing:antialiased}
+  body{
+    font-family:var(--font);background:var(--bg);color:var(--text);
+    min-height:100dvh;line-height:1.6;overflow-x:hidden;
+  }
+
+  /* ── Atmosphere ─────────────────────────────────────────── */
+  .atmosphere{
+    position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:
+      radial-gradient(ellipse 70% 50% at 15% 10%,rgba(245,158,11,0.05),transparent),
+      radial-gradient(ellipse 50% 40% at 85% 70%,rgba(245,158,11,0.03),transparent),
+      radial-gradient(ellipse 40% 30% at 50% 90%,rgba(52,211,153,0.02),transparent);
+  }
+  .noise{
+    position:fixed;inset:0;pointer-events:none;z-index:50;opacity:0.02;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size:128px 128px;
+  }
+
+  /* ── Layout ─────────────────────────────────────────────── */
+  .shell{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:32px 24px 80px}
+
+  /* ── Header ─────────────────────────────────────────────── */
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 0 40px;
+    opacity:0;animation:fadeUp 0.7s var(--ease) 0.05s forwards;
+  }
+  .logo{display:flex;align-items:center;gap:10px}
+  .logo-mark{
+    width:34px;height:34px;border-radius:10px;
+    background:linear-gradient(135deg,var(--accent),#d97706);
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:700;color:#000;letter-spacing:0.02em;
+    box-shadow:0 0 20px var(--accent-glow);
+  }
+  .logo-text{font-size:1.05rem;font-weight:600;letter-spacing:-0.02em}
+  .logo-text span{color:var(--accent)}
+  .status-bar{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+  .pill{
+    font-size:0.6rem;font-weight:500;letter-spacing:0.05em;text-transform:uppercase;
+    padding:4px 10px;border-radius:100px;
+    background:var(--glass);border:1px solid var(--glass-border);color:var(--text2);
+  }
+  .pill.ok{color:var(--green);border-color:rgba(52,211,153,0.18)}
+  .pill.missing{color:var(--red);border-color:rgba(248,113,113,0.12)}
+
+  /* ── Progress Rail ──────────────────────────────────────── */
+  .progress-rail{
+    display:flex;gap:3px;margin-bottom:40px;padding:0 2px;
+    opacity:0;animation:fadeUp 0.7s var(--ease) 0.1s forwards;
+  }
+  .rail-seg{
+    flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.04);
+    transition:background 0.6s var(--ease),box-shadow 0.6s var(--ease);
+  }
+  .rail-seg.active{background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
+  .rail-seg.done{background:var(--green);box-shadow:0 0 10px var(--green-glow)}
+
+  /* ── Tabs ───────────────────────────────────────────────── */
+  .tab-bar{
+    display:flex;gap:3px;margin-bottom:32px;
+    opacity:0;animation:fadeUp 0.7s var(--ease) 0.15s forwards;
+  }
+  .tab{
+    padding:10px 20px;font-size:0.78rem;font-weight:500;font-family:var(--font);
+    background:var(--glass);border:1px solid var(--glass-border);
+    border-radius:100px;color:var(--text2);cursor:pointer;
+    transition:all 0.3s var(--ease);
+  }
+  .tab:hover{color:var(--text);background:var(--glass-hover)}
+  .tab.active{
+    color:var(--accent);border-color:rgba(245,158,11,0.2);
+    background:var(--accent-subtle);
+  }
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+
+  /* ── Cards (Double-Bezel) ───────────────────────────────── */
+  .card-outer{
+    background:rgba(255,255,255,0.015);
+    border:1px solid var(--glass-border);
+    border-radius:1.75rem;padding:5px;margin-bottom:20px;
+    opacity:0;animation:fadeUp 0.7s var(--ease) forwards;
+  }
+  .card-outer:nth-child(1){animation-delay:0.2s}
+  .card-outer:nth-child(2){animation-delay:0.3s}
+  .card-outer:nth-child(3){animation-delay:0.4s}
+  .card-outer:nth-child(4){animation-delay:0.5s}
+  .card-inner{
+    background:var(--glass);border:1px solid rgba(255,255,255,0.03);
+    border-radius:calc(1.75rem - 5px);padding:28px;
+    box-shadow:inset 0 1px 1px rgba(255,255,255,0.03);
+  }
+  .step-eyebrow{
+    font-size:0.58rem;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:6px;
+  }
+  .card-title{font-size:1.15rem;font-weight:600;letter-spacing:-0.02em;margin-bottom:5px}
+  .card-desc{font-size:0.8rem;color:var(--text2);margin-bottom:22px;line-height:1.7}
+
+  /* ── Form Controls ──────────────────────────────────────── */
+  .row{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;align-items:end}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{
+    font-size:0.6rem;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;
+    color:var(--text3);
+  }
+  .field input,.field select{
+    background:rgba(255,255,255,0.025);border:1px solid var(--glass-border);
+    border-radius:var(--radius-sm);color:var(--text);padding:9px 13px;
+    font-family:var(--font);font-size:0.82rem;outline:none;
+    transition:border-color 0.3s var(--ease),box-shadow 0.3s var(--ease);
+  }
+  .field input:focus,.field select:focus{
+    border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);
+  }
+  .field input::placeholder{color:var(--text3)}
+
+  /* ── Buttons ────────────────────────────────────────────── */
+  .btn{
+    display:inline-flex;align-items:center;gap:7px;
+    padding:11px 22px;border-radius:100px;border:none;
+    font-family:var(--font);font-size:0.8rem;font-weight:600;
+    cursor:pointer;transition:all 0.4s var(--ease);
+  }
+  .btn:active{transform:scale(0.97)}
+  .btn:disabled{opacity:0.25;cursor:not-allowed;transform:none!important}
+  .btn-primary{
+    background:linear-gradient(135deg,var(--accent),#d97706);color:#000;
+    box-shadow:0 4px 20px var(--accent-glow);
+  }
+  .btn-primary:hover:not(:disabled){box-shadow:0 6px 28px rgba(245,158,11,0.2);transform:translateY(-1px)}
+  .btn-secondary{
+    background:var(--glass);color:var(--text);border:1px solid var(--glass-border);
+  }
+  .btn-secondary:hover:not(:disabled){background:var(--glass-hover)}
+  .btn-green{
+    background:linear-gradient(135deg,#059669,#34d399);color:#000;
+    box-shadow:0 4px 20px var(--green-glow);
+  }
+  .btn-green:hover:not(:disabled){box-shadow:0 6px 28px rgba(52,211,153,0.18);transform:translateY(-1px)}
+  .btn-sm{padding:7px 14px;font-size:0.7rem}
+  .btn-icon{
+    width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.2);
+    display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;
+    transition:all 0.4s var(--ease);
+  }
+  .btn:hover .btn-icon{transform:translate(1px,-1px)}
+  .btn-group{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  /* ── Categories (Tag Select) ──────────────────────────────────── */
+  .cat-select-wrap{position:relative;margin-bottom:14px}
+  .cat-select{
+    width:100%;background:rgba(255,255,255,0.025);border:1px solid var(--glass-border);
+    border-radius:var(--radius-sm);color:var(--text);padding:10px 14px;
+    font-family:var(--font);font-size:0.82rem;outline:none;appearance:none;
+    cursor:pointer;transition:border-color 0.3s var(--ease);
+  }
+  .cat-select:focus{border-color:var(--accent)}
+  .cat-select option{background:#1a1a1a;color:var(--text)}
+  .cat-custom-row{display:none;margin-top:10px;gap:8px;align-items:center}
+  .cat-custom-row.show{display:flex}
+  .cat-custom-input{
+    flex:1;background:rgba(255,255,255,0.025);border:1px solid var(--glass-border);
+    border-radius:var(--radius-sm);color:var(--text);padding:9px 13px;
+    font-family:var(--font);font-size:0.82rem;outline:none;
+    transition:border-color 0.3s var(--ease);
+  }
+  .cat-custom-input:focus{border-color:var(--accent)}
+  .cat-custom-input::placeholder{color:var(--text3)}
+  .cat-tags{
+    display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;
+    min-height:10px;
+  }
+  .cat-tag{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:5px 10px 5px 12px;border-radius:100px;
+    background:var(--accent-subtle);border:1px solid rgba(245,158,11,0.15);
+    font-size:0.72rem;color:var(--accent);font-weight:500;
+    animation:fadeUp 0.2s var(--ease) forwards;
+  }
+  .cat-tag.custom{background:rgba(96,165,250,0.08);border-color:rgba(96,165,250,0.15);color:var(--blue)}
+  .cat-tag-remove{
+    width:16px;height:16px;border-radius:50%;border:none;
+    background:rgba(255,255,255,0.08);color:var(--text2);
+    font-size:0.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    transition:all 0.2s;font-family:var(--font);
+  }
+  .cat-tag-remove:hover{background:rgba(248,113,113,0.2);color:var(--red)}
+  .cat-limit{font-size:0.65rem;color:var(--text3);margin-top:8px}
+
+  /* ── Progress ───────────────────────────────────────────── */
+  .progress{margin:18px 0}
+  .progress-track{height:3px;background:rgba(255,255,255,0.04);border-radius:2px;overflow:hidden}
+  .progress-fill{
+    height:100%;border-radius:2px;width:0%;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    box-shadow:0 0 10px var(--accent-glow);
+    transition:width 0.6s var(--ease);
+  }
+  .progress-text{font-size:0.7rem;color:var(--text2);margin-top:6px}
+
+  /* ── Table ──────────────────────────────────────────────── */
+  .table-header{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:14px;flex-wrap:wrap;gap:10px;
+  }
+  .filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .filter-bar input[type="text"]{
+    background:rgba(255,255,255,0.025);border:1px solid var(--glass-border);
+    border-radius:100px;color:var(--text);padding:7px 14px;
+    font-size:0.76rem;font-family:var(--font);width:220px;outline:none;
+    transition:border-color 0.3s var(--ease);
+  }
+  .filter-bar input[type="text"]:focus{border-color:var(--accent)}
+  .filter-bar select{
+    background:rgba(255,255,255,0.025);border:1px solid var(--glass-border);
+    border-radius:100px;color:var(--text);padding:7px 12px;
+    font-size:0.76rem;font-family:var(--font);outline:none;
+    appearance:none;cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 10px center;
+    padding-right:28px;
+    transition:border-color 0.3s var(--ease);
+  }
+  .filter-bar select:focus{border-color:var(--accent)}
+  .filter-bar select option{background:#1a1a1a;color:var(--text)}
+
+  /* ── Pill Select (shared) ──────────────────────────────────── */
+  .pill-select{
+    background:rgba(255,255,255,0.025);border:1px solid var(--glass-border);
+    border-radius:100px;color:var(--text);padding:6px 28px 6px 12px;
+    font-size:0.72rem;font-family:var(--font);outline:none;
+    appearance:none;cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 10px center;
+    transition:border-color 0.3s var(--ease);
+  }
+  .pill-select:focus{border-color:var(--accent)}
+  .pill-select:hover{border-color:rgba(255,255,255,0.1)}
+  .pill-select option{background:#1a1a1a;color:var(--text)}
+  .count{font-size:0.7rem;color:var(--text3)}
+  .table-scroll{overflow-x:auto;border-radius:var(--radius-sm)}
+  table{width:100%;border-collapse:collapse;font-size:0.76rem}
+  th{
+    text-align:left;padding:10px 14px;background:rgba(255,255,255,0.015);
+    color:var(--text3);font-weight:500;font-size:0.6rem;letter-spacing:0.1em;
+    text-transform:uppercase;border-bottom:1px solid var(--glass-border);
+    white-space:nowrap;position:sticky;top:0;
+  }
+  td{
+    padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.025);
+    max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  tr{transition:background 0.15s}
+  tr:hover td{background:rgba(255,255,255,0.015)}
+  .check-cell{width:34px;text-align:center}
+  .check-cell input{accent-color:var(--accent);cursor:pointer;width:14px;height:14px}
+  .quality{
+    display:inline-block;padding:2px 9px;border-radius:100px;
+    font-size:0.6rem;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;
+  }
+  .q-terrible{background:rgba(248,113,113,0.08);color:var(--red)}
+  .q-poor{background:rgba(245,158,11,0.08);color:var(--accent)}
+  .q-average{background:rgba(96,165,250,0.08);color:var(--blue)}
+  .q-scrape_failed,.q-error{background:rgba(248,113,113,0.08);color:var(--red)}
+  .q-decent{background:rgba(52,211,153,0.08);color:var(--green)}
+  .q-no_website{background:rgba(255,255,255,0.03);color:var(--text3)}
+
+  /* ── Apollo bar ─────────────────────────────────────────── */
+  .apollo-bar{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:14px 18px;margin-bottom:14px;
+    background:var(--accent-subtle);
+    border:1px solid rgba(245,158,11,0.1);
+    border-radius:var(--radius-sm);
+  }
+  .apollo-bar span{font-size:0.76rem;color:var(--text2)}
+
+  /* ── Stats Row ──────────────────────────────────────────── */
+  .stats{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+    gap:10px;margin-bottom:20px;
+  }
+  .stat{
+    padding:14px 16px;background:var(--glass);border:1px solid var(--glass-border);
+    border-radius:var(--radius-sm);text-align:center;
+  }
+  .stat-value{font-size:1.3rem;font-weight:700;color:var(--accent);margin-bottom:2px}
+  .stat-label{font-size:0.6rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em}
+
+  /* ── Log ────────────────────────────────────────────────── */
+  .log-area{
+    background:rgba(0,0,0,0.3);border:1px solid var(--glass-border);
+    border-radius:var(--radius-sm);padding:14px;max-height:180px;overflow-y:auto;
+    font-family:'SF Mono','Fira Code','Cascadia Code',monospace;
+    font-size:0.66rem;color:var(--text3);line-height:1.8;
+    scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.05) transparent;
+  }
+
+  /* ── Toast ──────────────────────────────────────────────── */
+  .toast{
+    position:fixed;bottom:24px;right:24px;z-index:100;
+    padding:12px 22px;border-radius:var(--radius-sm);
+    background:rgba(8,8,8,0.92);border:1px solid var(--glass-border);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    font-size:0.8rem;color:var(--text);
+    transform:translateY(16px);opacity:0;
+    transition:all 0.5s var(--ease);box-shadow:0 8px 28px rgba(0,0,0,0.4);
+  }
+  .toast.show{transform:translateY(0);opacity:1}
+  .toast.success{border-color:rgba(52,211,153,0.25)}
+  .toast.error{border-color:rgba(248,113,113,0.25)}
+  .toast.info{border-color:rgba(96,165,250,0.25)}
+
+  /* ── Lead Detail Modal ──────────────────────────────────── */
+  .detail-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);
+    z-index:100;display:flex;align-items:center;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity 0.25s var(--ease);
+  }
+  .detail-overlay.open{opacity:1;pointer-events:auto}
+  .detail-panel{
+    background:var(--glass);border:1px solid var(--glass-border);
+    border-radius:1.5rem;width:min(640px,92vw);max-height:85vh;overflow-y:auto;
+    padding:32px;box-shadow:0 24px 64px rgba(0,0,0,0.5);
+    transform:translateY(16px);transition:transform 0.25s var(--ease);
+  }
+  .detail-overlay.open .detail-panel{transform:translateY(0)}
+  .detail-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
+  .detail-name{font-size:1.2rem;font-weight:600;letter-spacing:-0.02em}
+  .detail-close{
+    background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);
+    border-radius:100px;width:32px;height:32px;display:flex;align-items:center;
+    justify-content:center;cursor:pointer;color:var(--text3);font-size:0.9rem;
+    transition:all 0.2s;flex-shrink:0;margin-left:16px;
+  }
+  .detail-close:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+  .detail-url{font-size:0.75rem;color:var(--accent2);margin-top:4px}
+  .detail-url a{color:var(--accent2);text-decoration:none}
+  .detail-url a:hover{text-decoration:underline}
+  .detail-section{margin-bottom:20px}
+  .detail-section-title{
+    font-size:0.58rem;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:10px;
+  }
+  .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px}
+  .detail-field{font-size:0.76rem;line-height:1.5}
+  .detail-label{color:var(--text3);font-size:0.65rem;text-transform:uppercase;letter-spacing:0.08em}
+  .detail-value{color:var(--text);margin-top:1px}
+  .detail-value a{color:var(--accent2);text-decoration:none}
+  .detail-value a:hover{text-decoration:underline}
+  .detail-badge{
+    display:inline-block;padding:2px 10px;border-radius:100px;
+    font-size:0.65rem;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;
+  }
+  .detail-empty{color:var(--text3);font-size:0.72rem;font-style:italic}
+  @media(max-width:480px){.detail-grid{grid-template-columns:1fr}.detail-panel{padding:20px}}
+
+  /* ── Animations ─────────────────────────────────────────── */
+  @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+  /* ── Misc ───────────────────────────────────────────────── */
+  a{color:var(--accent2);text-decoration:none;transition:color 0.2s}
+  a:hover{color:var(--accent)}
+  .hidden{display:none!important}
+  .divider{height:1px;background:var(--glass-border);margin:18px 0}
+  ::selection{background:var(--accent);color:#000}
+  .empty-state{
+    text-align:center;padding:40px 20px;color:var(--text3);font-size:0.82rem;
+  }
+  .empty-state .icon{font-size:2rem;margin-bottom:10px;opacity:0.4}
+
+  /* ── Responsive ─────────────────────────────────────────── */
+  @media(max-width:768px){
+    .shell{padding:20px 14px 60px}
+    .card-inner{padding:18px}
+    .filter-bar{flex-direction:column;align-items:stretch}
+    .filter-bar input[type="text"]{width:100%}
+    .apollo-bar{flex-direction:column;align-items:stretch}
+    .row{flex-direction:column}
+    .tab-bar{flex-wrap:wrap}
+    .stats{grid-template-columns:repeat(2,1fr)}
+  }
+
+  /* ── Step Locking ──────────────────────────────────────── */
+  .step-locked{
+    opacity:0.35;pointer-events:none;user-select:none;
+    filter:grayscale(0.6);
+    transition:opacity 0.5s var(--ease),filter 0.5s var(--ease);
+  }
+  .step-locked .card-inner{position:relative}
+  .step-locked .card-inner::after{
+    content:'Complete the previous step first';
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(8,8,8,0.6);border-radius:inherit;
+    font-size:0.72rem;color:var(--text3);font-weight:500;letter-spacing:0.04em;
+    pointer-events:none;
+  }
+  .step-complete .step-eyebrow::after{
+    content:' ✓';color:var(--green);
+  }
+
+  /* ── Apollo Search Toggle ──────────────────────────────── */
+  .search-toggle{
+    display:flex;gap:2px;padding:3px;border-radius:100px;
+    background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);
+    margin-bottom:16px;
+  }
+  .search-toggle-btn{
+    flex:1;padding:8px 16px;border-radius:100px;border:none;
+    font-family:var(--font);font-size:0.72rem;font-weight:500;
+    color:var(--text3);background:transparent;cursor:pointer;
+    transition:all 0.3s var(--ease);
+  }
+  .search-toggle-btn.active{
+    background:var(--accent-subtle);color:var(--accent);
+    border:1px solid rgba(245,158,11,0.15);
+  }
+  .search-toggle-btn:hover:not(.active){color:var(--text2)}
+
+  /* ── Upgrade CTA ───────────────────────────────────────── */
+  .upgrade-cta{
+    padding:14px 18px;border-radius:var(--radius-sm);
+    background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.03));
+    border:1px solid rgba(245,158,11,0.12);
+    text-align:center;margin-bottom:14px;
+  }
+  .upgrade-cta .cta-title{font-size:0.82rem;font-weight:600;color:var(--accent);margin-bottom:4px}
+  .upgrade-cta .cta-desc{font-size:0.7rem;color:var(--text2);margin-bottom:10px;line-height:1.5}
+
+  /* ── Confirm Dialog ──────────────────────────────────────── */
+  .confirm-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);
+    z-index:200;display:flex;align-items:center;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity 0.25s var(--ease);
+  }
+  .confirm-overlay.open{opacity:1;pointer-events:auto}
+  .confirm-panel{
+    background:rgba(20,20,20,0.95);border:1px solid var(--glass-border);
+    border-radius:var(--radius);padding:28px;width:min(400px,90vw);
+    text-align:center;box-shadow:0 24px 64px rgba(0,0,0,0.5);
+    transform:translateY(16px);transition:transform 0.25s var(--ease);
+  }
+  .confirm-overlay.open .confirm-panel{transform:translateY(0)}
+  .confirm-panel h3{font-size:1rem;font-weight:600;margin-bottom:8px}
+  .confirm-panel p{font-size:0.78rem;color:var(--text2);margin-bottom:20px;line-height:1.5}
+  .confirm-actions{display:flex;gap:8px;justify-content:center}
+
+  /* ── Pipeline Status Modal ────────────────────────────── */
+  .pipeline-modal{
+    position:fixed;bottom:24px;right:24px;z-index:90;
+    width:min(420px,calc(100vw - 48px));
+    background:rgba(12,12,12,0.95);border:1px solid var(--glass-border);
+    border-radius:var(--radius);padding:20px 22px;
+    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+    box-shadow:0 16px 48px rgba(0,0,0,0.5);
+    transform:translateY(120%);opacity:0;
+    transition:all 0.5s var(--ease);
+  }
+  .pipeline-modal.open{transform:translateY(0);opacity:1}
+  .pipeline-modal-header{
+    display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;
+  }
+  .pipeline-modal-step{
+    font-size:0.62rem;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;
+    color:var(--accent);
+  }
+  .pipeline-modal-close{
+    background:none;border:none;color:var(--text3);cursor:pointer;font-size:0.8rem;
+    padding:4px;transition:color 0.2s;
+  }
+  .pipeline-modal-close:hover{color:var(--text)}
+  .pipeline-modal-title{
+    font-size:0.88rem;font-weight:600;margin-bottom:4px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .pipeline-modal-desc{
+    font-size:0.72rem;color:var(--text2);margin-bottom:14px;
+    line-height:1.5;
+  }
+  .pipeline-modal .progress-track{margin-bottom:8px}
+  .pipeline-modal-eta{
+    font-size:0.65rem;color:var(--text3);text-align:right;
+  }
+  .pipeline-modal-log{
+    max-height:120px;overflow-y:auto;margin-top:12px;
+    background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.03);
+    border-radius:var(--radius-sm);padding:10px;
+    font-family:'SF Mono','Fira Code','Cascadia Code',monospace;
+    font-size:0.6rem;color:var(--text3);line-height:1.7;
+    scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.05) transparent;
+  }
+  .pipeline-modal-log .log-error{color:var(--red)}
+  .pipeline-modal-log .log-success{color:var(--green)}
+  .pipeline-modal-done{
+    text-align:center;padding:8px 0;
+  }
+  .pipeline-modal-done .done-icon{font-size:1.4rem;margin-bottom:4px}
+  .pipeline-modal-done .done-text{font-size:0.82rem;font-weight:600;color:var(--green)}
+  .pipeline-modal-done .done-sub{font-size:0.7rem;color:var(--text2);margin-top:2px}
+  .pipeline-modal-error{
+    padding:10px 14px;border-radius:var(--radius-sm);
+    background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.12);
+    margin-top:10px;
+  }
+  .pipeline-modal-error .err-title{font-size:0.75rem;font-weight:600;color:var(--red);margin-bottom:4px}
+  .pipeline-modal-error .err-desc{font-size:0.68rem;color:var(--text2);line-height:1.5}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+  .pulsing{animation:pulse 1.5s ease-in-out infinite}
+</style>
+</head>
+<body>
+
+<div class="atmosphere"></div>
+<div class="noise"></div>
+
+<div class="shell">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-mark">LP</div>
+      <div class="logo-text"><span>Lead</span>Pipeline</div>
+    </div>
+    <div class="status-bar">
+      <div id="userBar" style="display:flex;align-items:center;gap:8px">
+        <span id="userName" style="font-size:0.72rem;color:var(--text2)"></span>
+        <span id="userRuns" style="font-size:0.62rem;color:var(--text3)"></span>
+        <a href="/auth/logout" style="font-size:0.65rem;color:var(--text3);text-decoration:none;padding:3px 8px;border:1px solid var(--glass-border);border-radius:100px;transition:color 0.2s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">logout</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Progress Rail -->
+  <div class="progress-rail">
+    <div class="rail-seg" id="rail1"></div>
+    <div class="rail-seg" id="rail2"></div>
+    <div class="rail-seg" id="rail3"></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tab-bar">
+    <button class="tab active" data-tab="pipeline">Pipeline</button>
+    <button class="tab" data-tab="results">Results <span id="tabResultCount" class="hidden" style="font-size:0.65rem;opacity:0.6"></span></button>
+  </div>
+
+  <!-- ═══════════ PIPELINE TAB ═══════════ -->
+  <div class="tab-panel active" id="panel-pipeline">
+
+    <!-- STEP 1 -->
+    <div class="card-outer">
+      <div class="card-inner">
+        <div class="step-eyebrow">Step 01 — Discover</div>
+        <div class="card-title">Scrape Local Businesses</div>
+        <div class="card-desc">Search Google Places for service businesses in your target city. Collects name, address, phone, website, and rating.</div>
+        <div id="tierBar" style="display:flex;gap:16px;align-items:center;padding:10px 14px;margin-bottom:16px;background:var(--accent-subtle);border:1px solid rgba(245,158,11,0.1);border-radius:var(--radius-sm);font-size:0.72rem;color:var(--text2);flex-wrap:wrap">
+          <span style="color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:0.08em" id="tierName">starter</span>
+          <span>•</span>
+          <span>Max <strong id="tierMaxCats" style="color:var(--text)">1</strong> category per run</span>
+          <span>•</span>
+          <span>Max <strong id="tierMaxPer" style="color:var(--text)">20</strong> per category</span>
+          <span>•</span>
+          <span id="tierRuns" style="color:var(--text3)">—</span>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Target City</label>
+            <input type="text" id="cityInput" placeholder="Las Vegas, NV">
+          </div>
+          <div class="field">
+            <label>Max Per Category</label>
+            <input type="number" id="maxPerInput" value="15" min="1" max="20" style="width:90px">
+          </div>
+        </div>
+        <div class="cat-select-wrap">
+          <select class="cat-select" id="catDropdown" onchange="handleCatSelect(this)">
+            <option value="" disabled selected>+ Add a business category...</option>
+          </select>
+          <div class="cat-custom-row" id="catCustomRow">
+            <input type="text" class="cat-custom-input" id="catCustomInput" placeholder="e.g. tattoo shops in {city}" onkeydown="if(event.key==='Enter')addCustomCat()">
+            <button class="btn btn-sm btn-primary" onclick="addCustomCat()">Add</button>
+          </div>
+          <div class="cat-tags" id="catTags"></div>
+          <div class="cat-limit" id="catLimit"></div>
+        </div>
+        <div class="divider"></div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="scrapeBtn" onclick="startScrape()">
+            Start Scrape <span class="btn-icon">→</span>
+          </button>
+        </div>
+        <div id="scrapeProgress" class="hidden">
+          <div class="progress">
+            <div class="progress-track"><div class="progress-fill" id="scrapeFill"></div></div>
+            <div class="progress-text" id="scrapeText">Searching...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="card-outer step-locked" id="step2Card">
+      <div class="card-inner">
+        <div class="step-eyebrow">Step 02 — Enrich</div>
+        <div class="card-title">Analyze Websites</div>
+        <div class="card-desc">Firecrawl scrapes each business website to extract emails, phone numbers, and contact pages. Rates each site quality so you know who needs help most.</div>
+        <div id="enrichBreakdown" style="font-size:0.72rem;color:var(--text3);margin-bottom:14px;display:none">
+          <span id="enrichTotal" style="color:var(--text)"></span> found · 
+          <span id="enrichDone" style="color:var(--green)"></span> enriched · 
+          <span id="enrichPending" style="color:var(--accent)"></span> pending
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="enrichBtn" onclick="startEnrich()" disabled>
+            <span id="enrichBtnText">Enrich Websites</span> <span class="btn-icon">→</span>
+          </button>
+        </div>
+        <div id="enrichProgress" class="hidden">
+          <div class="progress">
+            <div class="progress-track"><div class="progress-fill" id="enrichFill"></div></div>
+            <div class="progress-text" id="enrichText">Enriching...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3 — Contact Enrichment -->
+    <div class="card-outer step-locked" id="step3Card">
+      <div class="card-inner">
+        <div class="step-eyebrow">Step 03 — Apollo Search</div>
+        <div class="card-title">Business Intel & Decision-Maker Emails</div>
+        <div class="card-desc">Search Apollo for company data (free) or find decision-maker emails (uses Apollo credits). Choose your search type below.</div>
+
+        <!-- Search type toggle -->
+        <div class="search-toggle" id="apolloSearchToggle">
+          <button class="search-toggle-btn active" data-type="org" onclick="setApolloSearchType('org')">🏢 Organization Search <span style="opacity:0.5;font-size:0.6rem">(free)</span></button>
+          <button class="search-toggle-btn" data-type="email" onclick="setApolloSearchType('email')">👤 People / Email Search <span style="opacity:0.5;font-size:0.6rem">(credits)</span></button>
+        </div>
+
+        <!-- Upgrade CTA for free tier (hidden by default) -->
+        <div class="upgrade-cta hidden" id="apolloUpgradeCta">
+          <div class="cta-title">🔒 Upgrade to Unlock Email Search</div>
+          <div class="cta-desc">Decision-maker email search requires a Starter plan or higher. Organization search is free for all plans.</div>
+        </div>
+
+        <!-- Apollo key setup (for BYOK) -->
+        <div id="apolloKeySetup" style="margin-bottom:14px">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <input type="password" class="cat-custom-input" id="apolloKeyInput" placeholder="Paste your Apollo API key (optional — for extra credits)" style="flex:1">
+            <button class="btn btn-sm btn-primary" onclick="saveApolloKey()">Save Key</button>
+          </div>
+          <div style="font-size:0.65rem;color:var(--text3)">Your own key is optional. Paid plans include 200 free Apollo credits. <a href="https://app.apollo.io/settings/api" target="_blank" style="color:var(--accent2)">Get more at apollo.io</a></div>
+        </div>
+
+        <div class="apollo-bar">
+          <button class="btn btn-sm btn-secondary" onclick="switchTab('results');selectNoEmails()">Select No-Emails</button>
+          <button class="btn btn-primary btn-sm" id="apolloBtn" onclick="startApollo()" disabled>
+            <span id="apolloBtnText">Enrich Selected</span> <span class="btn-icon">→</span>
+          </button>
+          <span class="count" id="selectedCount">0 selected</span>
+          <span class="count" id="apolloCreditCost" style="color:var(--accent)"></span>
+        </div>
+        <div id="apolloProgress" class="hidden">
+          <div class="progress">
+            <div class="progress-track"><div class="progress-fill" id="apolloFill"></div></div>
+            <div class="progress-text" id="apolloText">Enriching contacts...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4 -->
+    <!-- After pipeline: View Results -->
+    <div class="card-outer" id="viewResultsCard" style="display:none">
+      <div class="card-inner" style="text-align:center;padding:20px">
+        <div class="step-eyebrow">Pipeline Complete</div>
+        <div class="card-title" style="margin-bottom:12px">🎉 Your Leads Are Ready</div>
+        <div class="btn-group" style="justify-content:center">
+          <button class="btn btn-green" onclick="switchTab('results')">
+            View Results <span class="btn-icon">→</span>
+          </button>
+          <button class="btn btn-secondary" id="exportCsvBtn" onclick="exportCsv()" disabled>
+            Download CSV <span class="btn-icon">↓</span>
+          </button>
+          <button class="btn btn-secondary" id="exportJsonBtn" onclick="exportJson()" disabled>JSON</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="card-outer">
+      <div class="card-inner">
+        <div class="table-header">
+          <div class="card-title" style="font-size:0.9rem">Pipeline Log</div>
+          <button class="btn btn-sm btn-secondary" onclick="toggleLog()">Show / Hide</button>
+        </div>
+        <div class="log-area hidden" id="logArea"></div>
+      </div>
+    </div>
+
+    <div style="text-align:right;margin-top:6px;opacity:0;animation:fadeUp 0.7s var(--ease) 0.6s forwards">
+      <button class="btn btn-sm btn-secondary" onclick="clearData()" style="color:var(--red);border-color:rgba(248,113,113,0.1)">Clear All Data</button>
+    </div>
+  </div>
+
+  <!-- ═══════════ RESULTS TAB ═══════════ -->
+  <div class="tab-panel" id="panel-results">
+
+    <!-- Stats -->
+    <div id="statsSection" class="hidden">
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value" id="statTotal">0</div>
+          <div class="stat-label">Total</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statEmails">0</div>
+          <div class="stat-label">With Email</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statTerrible">0</div>
+          <div class="stat-label">Terrible Sites</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statNoSite">0</div>
+          <div class="stat-label">No Website</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Table -->
+    <div class="card-outer">
+      <div class="card-inner">
+        <div class="table-header">
+          <div class="card-title">Lead List</div>
+          <div class="filter-bar">
+            <input type="text" id="searchInput" placeholder="Search by name..." oninput="renderTable()">
+            <select id="categoryFilter" onchange="renderTable()">
+              <option value="">All Types</option>
+            </select>
+            <select id="qualityFilter" onchange="renderTable()">
+              <option value="">All Quality</option>
+              <option value="terrible">Terrible</option>
+              <option value="poor">Poor</option>
+              <option value="average">Average</option>
+              <option value="decent">Decent</option>
+              <option value="no_website">No Website</option>
+            </select>
+            <select id="emailFilter" onchange="renderTable()">
+              <option value="">All Emails</option>
+              <option value="has_email">Has Email</option>
+              <option value="no_email">No Email</option>
+            </select>
+            <span class="count" id="tableCount"></span>
+          </div>
+        </div>
+
+        <!-- Results only: rescan + export -->
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center" id="resultsActionsBar">
+          <button class="btn btn-sm btn-secondary" id="rescanFailedBtn" onclick="rescanFailed()" style="display:none">
+            ↻ Rescan Failed
+          </button>
+          <button class="btn btn-sm btn-green" id="exportCsvResultsBtn" onclick="exportCsv()" disabled>
+            CSV <span class="btn-icon">↓</span>
+          </button>
+          <button class="btn btn-sm btn-secondary" id="exportJsonResultsBtn" onclick="exportJson()" disabled>JSON</button>
+        </div>
+
+        <div id="tableEmpty" class="empty-state">
+          <div class="icon">📋</div>
+          <div>No results yet. Run <strong>Step 1</strong> to scrape businesses.</div>
+        </div>
+
+        <div class="table-scroll hidden" id="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="check-cell"><input type="checkbox" id="selectAllCheck" onchange="toggleSelectAll()"></th>
+                <th>Name</th>
+                <th>Quality</th>
+                <th>Rating</th>
+                <th>Phone</th>
+                <th>Website</th>
+                <th>Emails</th>
+                <th>Contact</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="detail-overlay" id="detailOverlay" onclick="if(event.target===this)closeLeadDetail()">
+  <div class="detail-panel" id="detailPanel"></div>
+</div>
+
+<div class="confirm-overlay" id="confirmOverlay" onclick="if(event.target===this)closeConfirm()">
+  <div class="confirm-panel">
+    <h3 id="confirmTitle">Are you sure?</h3>
+    <p id="confirmDesc">This action cannot be undone.</p>
+    <div class="confirm-actions">
+      <button class="btn btn-secondary btn-sm" onclick="closeConfirm()">Cancel</button>
+      <button class="btn btn-sm" id="confirmAction" style="background:var(--red);color:#fff" onclick="confirmCallback()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pipeline Status Modal -->
+<div class="pipeline-modal" id="pipelineModal">
+  <div class="pipeline-modal-header">
+    <span class="pipeline-modal-step pulsing" id="pmStep">SCRAPING</span>
+    <button class="pipeline-modal-close" onclick="minimizeModal()">✕</button>
+  </div>
+  <div id="pmContent">
+    <div class="pipeline-modal-title" id="pmTitle">Starting...</div>
+    <div class="pipeline-modal-desc" id="pmDesc">Preparing pipeline</div>
+    <div class="progress-track"><div class="progress-fill" id="pmFill"></div></div>
+    <div class="pipeline-modal-eta" id="pmEta"></div>
+  </div>
+  <div class="pipeline-modal-log" id="pmLog"></div>
+</div>
+
+<script>
+// Inject CSRF token on state-changing requests (double-submit cookie).
+(function(){
+  const _fetch=window.fetch;
+  const UNSAFE=new Set(['POST','PUT','PATCH','DELETE']);
+  function getCsrfCookie(){
+    const m=document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
+    return m?decodeURIComponent(m[1]):'';
+  }
+  window.fetch=function(input,init){
+    init=init||{};
+    const method=(init.method||(typeof input==='object'&&input.method)||'GET').toUpperCase();
+    if(UNSAFE.has(method)){
+      const token=getCsrfCookie();
+      if(token){
+        const headers=new Headers(init.headers||{});
+        if(!headers.has('X-CSRF-Token'))headers.set('X-CSRF-Token',token);
+        init.headers=headers;
+      }
+    }
+    return _fetch(input,init);
+  };
+})();
+
+let businesses=[];
+let pollInterval=null;
+let tier={tier:'free',max_categories:1,max_per_category:10};
+let apolloSearchType='org'; // 'org' or 'email'
+let _confirmCb=null;
+
+async function init(){await loadTier();await loadStatus();await loadCategories();await loadApolloKey();await refreshTable();updateStepLocking()}
+
+// ── Tier ─────────────────────────────────────────────────────────
+async function loadTier(){
+  try{
+    const r=await fetch('/api/tier');tier=await r.json();
+    document.getElementById('tierName').textContent=tier.tier;
+    document.getElementById('tierMaxCats').textContent=tier.max_categories;
+    document.getElementById('tierMaxPer').textContent=tier.max_per_category;
+
+    // Show credit balance
+    const balance=tier.credit_balance!=null?tier.credit_balance:'—';
+    const runsEl=document.getElementById('tierRuns');
+    if(runsEl)runsEl.textContent=`🪙 ${balance} credits remaining`;
+
+    // Cap max per category input
+    const maxInput=document.getElementById('maxPerInput');
+    maxInput.max=tier.max_per_category;
+    if(parseInt(maxInput.value)>tier.max_per_category)maxInput.value=tier.max_per_category;
+  }catch(e){}
+}
+
+// ── Tabs ────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>switchTab(tab.dataset.tab));
+});
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='panel-'+name));
+}
+
+// ── Status ──────────────────────────────────────────────────────
+async function loadStatus(){
+  try{
+    // Load user info
+    const mr=await fetch('/api/me');const me=await mr.json();
+    document.getElementById('userName').textContent=me.name||me.email;
+    const credits=me.credits?me.credits.balance:'—';
+    document.getElementById('userRuns').textContent=`${me.tier} · 🪙 ${credits} credits`;
+
+    // Load pipeline status
+    const r=await fetch('/api/status');const s=await r.json();
+    document.getElementById('cityInput').placeholder=s.city;
+    if(s.pipeline.running)startPolling(s.pipeline.step);
+    updateRails(s);
+  }catch(e){
+    if(e.status===401||String(e).includes('401'))window.location.href='/login';
+  }
+}
+
+function updateRails(status){
+  const r1=document.getElementById('rail1');
+  const r2=document.getElementById('rail2');
+  const r3=document.getElementById('rail3');
+  r1.className='rail-seg'+(status.business_count>0?' done':'');
+  if(businesses.length>0){
+    if(businesses.some(b=>b.site_quality))r2.className='rail-seg done';
+    if(businesses.some(b=>b.apollo_industry||b.contact_email))r3.className='rail-seg done';
+    else if(businesses.some(b=>b.site_quality))r3.className='rail-seg active';
+  }
+}
+
+// ── Categories (Tag Select) ──────────────────────────────────────
+let categories=[];
+let selectedCats=[]; // array of query strings
+
+async function loadCategories(){
+  const r=await fetch('/api/categories');categories=await r.json();
+  renderDropdown();
+  updateCatLimit();
+}
+
+function renderDropdown(){
+  const dd=document.getElementById('catDropdown');
+  // Filter out already-selected
+  const available=categories.filter(c=>!selectedCats.includes(c));
+  dd.innerHTML='<option value="" disabled selected>+ Add a business category...</option>'
+    +available.map(c=>`<option value="${categories.indexOf(c)}">${c.replace(' in {city}','')}</option>`).join('')
+    +'<option value="custom">Custom search...</option>';
+}
+
+function handleCatSelect(el){
+  if(el.value==='custom'){
+    document.getElementById('catCustomRow').classList.add('show');
+    document.getElementById('catCustomInput').focus();
+    el.value='';
+    return;
+  }
+  if(el.value==='')return;
+  if(selectedCats.length>=tier.max_categories){
+    toast(`Your ${tier.tier} plan allows max ${tier.max_categories} categor${tier.max_categories>1?'ies':'y'} per run`,'error');
+    el.value='';return;
+  }
+  const idx=parseInt(el.value);
+  const query=categories[idx];
+  if(!selectedCats.includes(query)){
+    selectedCats.push(query);
+    renderTags();renderDropdown();updateCatLimit();
+  }
+  el.value='';
+}
+
+function addCustomCat(){
+  const input=document.getElementById('catCustomInput');
+  let val=input.value.trim();
+  if(!val)return;
+  // Auto-append {city} if not present
+  if(!val.includes('{city}')){
+    // Check if it ends with "in ..." pattern
+    val=val.replace(/\s+in\s+.*$/i,'')+' in {city}';
+  }
+  if(selectedCats.length>=tier.max_categories){
+    toast(`Your ${tier.tier} plan allows max ${tier.max_categories} categor${tier.max_categories>1?'ies':'y'} per run`,'error');return;
+  }
+  if(!selectedCats.includes(val)){
+    selectedCats.push(val);
+    renderTags();renderDropdown();updateCatLimit();
+  }
+  input.value='';
+  document.getElementById('catCustomRow').classList.remove('show');
+}
+
+function removeCat(idx){
+  selectedCats.splice(idx,1);
+  renderTags();renderDropdown();updateCatLimit();
+}
+
+function renderTags(){
+  document.getElementById('catTags').innerHTML=selectedCats.map((c,i)=>{
+    const label=c.replace(' in {city}','').replace(' in '+document.getElementById('cityInput').value,'');
+    const isCustom=!categories.includes(c);
+    return`<span class="cat-tag${isCustom?' custom':''}">${esc(label)}<button class="cat-tag-remove" onclick="removeCat(${i})">✕</button></span>`;
+  }).join('');
+}
+
+function updateCatLimit(){
+  document.getElementById('catLimit').textContent=`${selectedCats.length} / ${tier.max_categories} selected`;
+}
+
+// Close custom row on outside click
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.cat-select-wrap')){
+    document.getElementById('catCustomRow').classList.remove('show');
+  }
+});
+
+// ── Scrape ──────────────────────────────────────────────────────
+async function startScrape(){
+  if(!selectedCats.length)return toast('Select at least one category','error');
+  const city=document.getElementById('cityInput').value||document.getElementById('cityInput').placeholder;
+  if(!city.trim())return toast('Enter a target city','error');
+  const maxPer=parseInt(document.getElementById('maxPerInput').value)||15;
+
+  // Warn if existing data
+  if(businesses.length>0){
+    if(!confirm(`You already have ${businesses.length} businesses. New results will be added (duplicates skipped). Continue?`))return;
+  }
+
+  document.getElementById('scrapeBtn').disabled=true;
+  document.getElementById('scrapeProgress').classList.remove('hidden');
+  // Cap max per category to tier limit
+  const cappedMax=Math.min(maxPer,tier.max_per_category);
+  const r=await fetch('/api/scrape',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({categories:selectedCats,max_per:cappedMax,city,tier:tier.tier})});
+  if(!r.ok){const e=await r.json();toast(e.error||'Scrape failed','error');
+    document.getElementById('scrapeBtn').disabled=false;return}
+  startPolling('scrape');
+}
+
+// ── Enrich ──────────────────────────────────────────────────────
+async function startEnrich(){
+  document.getElementById('enrichBtn').disabled=true;
+  document.getElementById('enrichProgress').classList.remove('hidden');
+  const r=await fetch('/api/enrich',{method:'POST'});
+  if(!r.ok){const e=await r.json();toast(e.error||'Enrich failed','error');
+    document.getElementById('enrichBtn').disabled=false;return}
+  startPolling('enrich');
+}
+
+// ── Contact Enrichment (BYOK) ──────────────────────────────────
+let apolloKeySet=false;
+
+async function loadApolloKey(){
+  try{
+    const r=await fetch('/api/settings/apollo-key');
+    const d=await r.json();
+    apolloKeySet=!!d.has_key;
+    updateApolloKeyUI();
+  }catch(e){apolloKeySet=false;updateApolloKeyUI()}
+}
+
+function updateApolloKeyUI(){
+  const setup=document.getElementById('apolloKeySetup');
+  const input=document.getElementById('apolloKeyInput');
+  if(apolloKeySet){
+    setup.innerHTML=`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.15);border-radius:var(--radius-sm);margin-bottom:14px;font-size:0.75rem">
+      <span style="color:var(--green)">✓</span>
+      <span style="color:var(--text2)">Apollo API key configured</span>
+      <button class="btn btn-sm btn-secondary" onclick="removeApolloKey()" style="margin-left:auto;padding:3px 10px;font-size:0.65rem">Remove</button>
+    </div>`;
+  }else{
+    setup.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <input type="password" class="cat-custom-input" id="apolloKeyInput" placeholder="Paste your Apollo API key..." style="flex:1">
+      <button class="btn btn-sm btn-primary" onclick="saveApolloKey()">Save Key</button>
+    </div>
+    <div style="font-size:0.65rem;color:var(--text3)">Get a free key at <a href="https://app.apollo.io/settings/api" target="_blank" style="color:var(--accent2)">app.apollo.io/settings/api</a> — 900 free credits/year</div>`;
+  }
+}
+
+async function saveApolloKey(){
+  const input=document.getElementById('apolloKeyInput');
+  const key=input.value.trim();
+  if(!key)return toast('Enter an API key','error');
+  try{
+    const r=await fetch('/api/settings/apollo-key',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({key})});
+    if(!r.ok){const e=await r.json();toast(e.error||'Failed to save key','error');return}
+    apolloKeySet=true;updateApolloKeyUI();toast('Apollo key saved','success');
+  }catch(e){toast('Failed to save key','error')}
+}
+
+async function removeApolloKey(){
+  if(!confirm('Remove your Apollo API key?'))return;
+  try{
+    await fetch('/api/settings/apollo-key',{method:'DELETE'});
+    apolloKeySet=false;updateApolloKeyUI();toast('Apollo key removed','success');
+  }catch(e){toast('Failed to remove key','error')}
+}
+
+function selectNoEmails(){
+  businesses.forEach(b=>{if(!b.emails)b.selected_for_apollo=true});
+  renderTable();updateSelectedCount();
+}
+function updateSelectedCount(){
+  const n=businesses.filter(b=>b.selected_for_apollo).length;
+  const t=`${n} selected`;
+  document.getElementById('selectedCount').textContent=t;
+  const hasSel=n>0&&businesses.length>0;
+  document.getElementById('apolloBtn').disabled=!hasSel;
+  // Show credit cost estimate for people search
+  const costEl=document.getElementById('apolloCreditCost');
+  if(costEl){
+    if(apolloSearchType==='org')costEl.textContent='';
+    else costEl.textContent=n>0?`~${n} Apollo credits`:'';
+  }
+}
+async function startApollo(){
+  let indices=businesses.reduce((a,b,i)=>{if(b.selected_for_apollo)a.push(i);return a},[]);
+  if(!indices.length)return toast('Select businesses first','error');
+  if(indices.length>25){
+    indices=indices.slice(0,25);
+    toast('Capped to 25 businesses per run','info');
+  }
+  const enrichType=apolloSearchType;
+  document.getElementById('apolloBtn').disabled=true;
+  document.getElementById('apolloProgress').classList.remove('hidden');
+  const r=await fetch('/api/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({indices,enrich_type:enrichType})});
+  if(!r.ok){
+    const e=await r.json();
+    if(e.upgrade_required){
+      toast('Upgrade required for email search','error');
+    }else if(e.needs_apollo_key){
+      toast('Add your Apollo API key or upgrade for credits','error');
+    }else{
+      toast(e.error||'Contact enrichment failed','error');
+    }
+    document.getElementById('apolloBtn').disabled=false;return;
+  }
+  startPolling('apollo');
+}
+
+// ── Polling + Status Modal ──────────────────────────────────────
+const STEP_LABELS={scrape:'Discovering Businesses',enrich:'Analyzing Websites',apollo:'Apollo Enrichment'};
+let _modalMinimized=false;
+let _lastLogLines=[];
+
+function openPipelineModal(step){
+  const modal=document.getElementById('pipelineModal');
+  const pmStep=document.getElementById('pmStep');
+  const pmTitle=document.getElementById('pmTitle');
+  const pmDesc=document.getElementById('pmDesc');
+  const pmFill=document.getElementById('pmFill');
+  const pmEta=document.getElementById('pmEta');
+  const pmLog=document.getElementById('pmLog');
+  pmStep.textContent=step.toUpperCase();
+  pmStep.classList.add('pulsing');
+  pmTitle.textContent='Starting...';
+  pmDesc.textContent='Preparing pipeline — this may take a moment';
+  if(pmFill)pmFill.style.width='5%';
+  if(pmEta)pmEta.textContent='';
+  if(pmLog)pmLog.innerHTML='';
+  _modalMinimized=false;
+  modal.classList.add('open');
+}
+
+function updatePipelineModal(step,progress,logLines){
+  if(_modalMinimized)return;
+  const pmStep=document.getElementById('pmStep');
+  const pmTitle=document.getElementById('pmTitle');
+  const pmDesc=document.getElementById('pmDesc');
+  const pmFill=document.getElementById('pmFill');
+  const pmEta=document.getElementById('pmEta');
+  const pmLog=document.getElementById('pmLog');
+
+  pmStep.textContent=step.toUpperCase();
+
+  // Parse [3/15] format
+  const match=progress.match(/\[(\d+)\/(\d+)\]\s*(.*)/);
+  if(match){
+    const current=parseInt(match[1]);
+    const total=parseInt(match[2]);
+    const detail=match[3]||'';
+    const pct=Math.round((current/total)*100);
+    if(pmFill)pmFill.style.width=pct+'%';
+    pmTitle.textContent=detail||`Processing ${current} of ${total}`;
+    pmDesc.textContent=`${STEP_LABELS[step]||step} — ${current}/${total} complete`;
+  }else{
+    pmTitle.textContent=progress||'Working...';
+    pmDesc.textContent=STEP_LABELS[step]||step;
+    if(pmFill&&progress!=='starting...')pmFill.style.width='30%';
+  }
+
+  // Show recent log entries (last 8 from current session)
+  if(logLines&&logLines.length>0&&pmLog){
+    // Filter to recent, relevant lines
+    const recent=logLines.slice(-8);
+    pmLog.innerHTML=recent.map(l=>{
+      const line=esc(l);
+      if(line.toLowerCase().includes('error'))return`<div class="log-error">${line}</div>`;
+      if(line.toLowerCase().includes('complete')||line.toLowerCase().includes('enriched'))return`<div class="log-success">${line}</div>`;
+      return`<div>${line}</div>`;
+    }).join('');
+    pmLog.scrollTop=pmLog.scrollHeight;
+  }
+}
+
+function closePipelineModal(step,error,resultCount){
+  const pmStep=document.getElementById('pmStep');
+  const pmContent=document.getElementById('pmContent');
+  const pmLog=document.getElementById('pmLog');
+
+  pmStep.classList.remove('pulsing');
+
+  if(error){
+    pmStep.textContent='ERROR';
+    pmStep.style.color='var(--red)';
+    pmContent.innerHTML=`
+      <div class="pipeline-modal-error">
+        <div class="err-title">Pipeline Error</div>
+        <div class="err-desc">${esc(error)}</div>
+      </div>
+      <div style="margin-top:12px;text-align:center">
+        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('pipelineModal').classList.remove('open');pmStep.style.color=''">Dismiss</button>
+      </div>`;
+  }else{
+    pmStep.textContent='COMPLETE';
+    pmStep.style.color='var(--green)';
+    const label=STEP_LABELS[step]||step;
+    pmContent.innerHTML=`
+      <div class="pipeline-modal-done">
+        <div class="done-icon">\u2705</div>
+        <div class="done-text">${label} Complete</div>
+        <div class="done-sub">${resultCount!=null?resultCount+' businesses processed':''}</div>
+      </div>`;
+  }
+
+  // Auto-dismiss after 4s if no error
+  if(!error){
+    setTimeout(()=>{
+      document.getElementById('pipelineModal').classList.remove('open');
+      pmStep.style.color='';
+      // Restore content structure
+      pmContent.innerHTML=`
+        <div class="pipeline-modal-title" id="pmTitle">Starting...</div>
+        <div class="pipeline-modal-desc" id="pmDesc">Preparing pipeline</div>
+        <div class="progress-track"><div class="progress-fill" id="pmFill"></div></div>
+        <div class="pipeline-modal-eta" id="pmEta"></div>`;
+    },4000);
+  }
+}
+
+function minimizeModal(){
+  _modalMinimized=true;
+  document.getElementById('pipelineModal').classList.remove('open');
+}
+
+function startPolling(step){
+  if(pollInterval)clearInterval(pollInterval);
+  const progressEl=document.getElementById(step+'Progress');
+  if(progressEl)progressEl.classList.remove('hidden');
+  let startTime=Date.now();
+  openPipelineModal(step);
+
+  pollInterval=setInterval(async()=>{
+    try{
+      const r=await fetch('/api/status');const s=await r.json();
+      updateRails(s);
+
+      // Fetch log for modal
+      let logLines=[];
+      try{const lr=await fetch('/api/log');logLines=await lr.json();_lastLogLines=logLines}catch(e){}
+
+      if(s.pipeline.running){
+        const fill=document.getElementById(step+'Fill');
+        const text=document.getElementById(step+'Text');
+        const progress=s.pipeline.progress||'running...';
+
+        // Update inline progress
+        const match=progress.match(/\[(\d+)\/(\d+)\]/);
+        if(match&&fill){
+          const current=parseInt(match[1]);
+          const total=parseInt(match[2]);
+          const pct=Math.round((current/total)*100);
+          fill.style.width=pct+'%';
+          const elapsed=(Date.now()-startTime)/1000;
+          const perItem=current>0?elapsed/current:0;
+          const remaining=Math.round(perItem*(total-current));
+          const eta=remaining>60?`~${Math.ceil(remaining/60)} min left`:`~${remaining}s left`;
+          if(text)text.textContent=`${progress} \u2014 ${eta}`;
+        }else{
+          if(fill)fill.style.width='15%';
+          if(text)text.textContent=progress;
+        }
+
+        // Update modal
+        updatePipelineModal(step,progress,logLines);
+
+        // Update main log area
+        updateLogArea(logLines);
+      }else{
+        clearInterval(pollInterval);pollInterval=null;
+
+        // Update main log area one last time
+        updateLogArea(logLines);
+
+        const hasError=!!s.pipeline.error;
+        if(hasError)toast(s.pipeline.error,'error');
+        else if(s.pipeline.progress==='done'){
+          toast(`${step} complete`,'success');
+        }
+
+        document.getElementById('scrapeBtn').disabled=false;
+        document.getElementById('enrichBtn').disabled=false;
+        const fill=document.getElementById(step+'Fill');
+        if(fill)fill.style.width=hasError?'0%':'100%';
+
+        await refreshTable();
+        loadTier();
+
+        // Close modal with result
+        closePipelineModal(step,s.pipeline.error,businesses.length);
+
+        // Auto-scroll to next step
+        if(!hasError)autoAdvance(step);
+      }
+    }catch(e){}
+  },1500);
+}
+
+function autoAdvance(completedStep){
+  if(completedStep==='scrape'){
+    // Scroll to Step 2
+    setTimeout(()=>{
+      const el=document.getElementById('step2Card');
+      if(el){
+        el.scrollIntoView({behavior:'smooth',block:'center'});
+        el.style.boxShadow='0 0 30px var(--accent-glow)';
+        setTimeout(()=>el.style.boxShadow='',2000);
+      }
+    },800);
+  }else if(completedStep==='enrich'){
+    // Scroll to Step 3
+    setTimeout(()=>{
+      const el=document.getElementById('step3Card');
+      if(el){
+        el.scrollIntoView({behavior:'smooth',block:'center'});
+        el.style.boxShadow='0 0 30px var(--accent-glow)';
+        setTimeout(()=>el.style.boxShadow='',2000);
+      }
+    },800);
+  }else if(completedStep==='apollo'){
+    // Switch to results tab
+    setTimeout(()=>{
+      switchTab('results');
+      toast('Apollo enrichment done — check your results!','success');
+    },1200);
+  }
+}
+
+async function loadLog(){
+  try{const r=await fetch('/api/log');const lines=await r.json();
+    _lastLogLines=lines;
+    updateLogArea(lines);
+  }catch(e){}
+}
+
+function updateLogArea(lines){
+  const el=document.getElementById('logArea');
+  if(!el||!lines)return;
+  el.innerHTML=lines.slice(-50).map(l=>{
+    const line=esc(l);
+    if(line.toLowerCase().includes('error'))return`<div style="color:var(--red)">${line}</div>`;
+    if(line.toLowerCase().includes('complete'))return`<div style="color:var(--green)">${line}</div>`;
+    return`<div>${line}</div>`;
+  }).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+function toggleLog(){
+  const el=document.getElementById('logArea');
+  el.classList.toggle('hidden');
+  if(!el.classList.contains('hidden'))loadLog();
+}
+
+// ── Table ───────────────────────────────────────────────────────
+async function refreshTable(){
+  try{const r=await fetch('/api/businesses');businesses=await r.json()}catch(e){businesses=[]}
+  const hasData=businesses.length>0;
+
+  // Stats
+  const statsEl=document.getElementById('statsSection');
+  statsEl.classList.toggle('hidden',!hasData);
+  if(hasData){
+    document.getElementById('statTotal').textContent=businesses.length;
+    document.getElementById('statEmails').textContent=businesses.filter(b=>b.emails).length;
+    document.getElementById('statTerrible').textContent=businesses.filter(b=>b.site_quality==='terrible').length;
+    document.getElementById('statNoSite').textContent=businesses.filter(b=>!b.website).length;
+  }
+
+  // Populate category filter
+  const catSet=new Set();
+  businesses.forEach(b => {
+    if(b.types) {
+      const mainType = b.types.split(',')[0].trim();
+      if(mainType) catSet.add(mainType);
+    }
+  });
+  const catFilter = document.getElementById('categoryFilter');
+  if(catFilter) {
+    const currentVal = catFilter.value;
+    catFilter.innerHTML = '<option value="">All Types</option>' + 
+      Array.from(catSet).sort().map(c => `<option value="${c}">${c.replace(/_/g, ' ')}</option>`).join('');
+    if(Array.from(catSet).includes(currentVal)) catFilter.value = currentVal;
+  }
+
+  // Tab badge
+  const badge=document.getElementById('tabResultCount');
+  if(hasData){badge.textContent=`(${businesses.length})`;badge.classList.remove('hidden')}
+  else badge.classList.add('hidden');
+
+  // Enrich breakdown
+  const withWebsite=businesses.filter(b=>b.website).length;
+  const enriched=businesses.filter(b=>b.site_quality).length;
+  const pending=withWebsite-enriched;
+  const breakdown=document.getElementById('enrichBreakdown');
+  if(hasData){
+    breakdown.style.display='';
+    document.getElementById('enrichTotal').textContent=businesses.length;
+    document.getElementById('enrichDone').textContent=enriched;
+    document.getElementById('enrichPending').textContent=pending;
+  }else{breakdown.style.display='none'}
+
+  // Buttons
+  const hasPending=pending>0;
+  document.getElementById('enrichBtn').disabled=!hasPending;
+  document.getElementById('enrichBtnText').textContent=hasPending?`Enrich ${pending} business${pending>1?'es':''}`:'All enriched ✓';
+  if(!hasPending&&hasData)document.getElementById('enrichBtn').classList.add('btn-green');
+  else document.getElementById('enrichBtn').classList.remove('btn-green');
+  document.getElementById('exportCsvBtn').disabled=!hasData;
+  document.getElementById('exportJsonBtn').disabled=!hasData;
+  document.getElementById('exportCsvResultsBtn').disabled=!hasData;
+  document.getElementById('exportJsonResultsBtn').disabled=!hasData;
+  updateRescanButton();
+  updateStepLocking();
+
+  // Table
+  const empty=document.getElementById('tableEmpty');
+  const wrap=document.getElementById('tableWrap');
+  empty.classList.toggle('hidden',hasData);
+  wrap.classList.toggle('hidden',!hasData);
+
+  renderTable();updateSelectedCount();
+}
+
+function filteredBusinesses(){
+  const s=document.getElementById('searchInput').value.toLowerCase();
+  const q=document.getElementById('qualityFilter').value;
+  const e=document.getElementById('emailFilter').value;
+  const c=document.getElementById('categoryFilter')?.value;
+  return businesses.filter(b=>{
+    if(s&&!b.name.toLowerCase().includes(s))return false;
+    if(c&&(!b.types || b.types.split(',')[0].trim() !== c))return false;
+    // Fix: no_website matches businesses with no website OR no site_quality
+    if(q==='no_website'){
+      if(b.website)return false;
+    }else if(q&&b.site_quality!==q)return false;
+    if(e==='has_email'&&!b.emails)return false;
+    if(e==='no_email'&&b.emails)return false;
+    return true;
+  });
+}
+
+function renderTable(){
+  const f=filteredBusinesses();
+  document.getElementById('tableCount').textContent=`${f.length} of ${businesses.length}`;
+  document.getElementById('tableBody').innerHTML=f.map((b,i)=>{
+    const qClass=b.site_quality?`q-${b.site_quality.split(':')[0]}`:(!b.website?'q-no_website':'');
+    const qLabel=b.site_quality||(!b.website?'no website':'—');
+    const checked=b.selected_for_apollo?'checked':'';
+    const site=b.website?`<a href="${esc(b.website)}" target="_blank">${esc(b.website.replace(/^https?:\/\//,'').slice(0,25))}</a>`:'—';
+    const emails=b.emails||'—';
+    const emailDisplay=emails.length>30?`<span title="${esc(emails)}">${esc(emails.slice(0,30))}…</span>`:esc(emails);
+    // Apollo contact compact
+    const contactParts=[];
+    if(b.contact_name)contactParts.push(`<strong>${esc(b.contact_name)}</strong>`);
+    if(b.contact_email)contactParts.push(`<span style="color:var(--accent2)">${esc(b.contact_email)}</span>`);
+    if(b.contact_phone)contactParts.push(esc(b.contact_phone));
+    const contactHtml=contactParts.length?contactParts.join(' · '):'—';
+    // Rating display
+    const stars=b.rating?`${'\u2605'.repeat(Math.round(b.rating))}${'\u2606'.repeat(5-Math.round(b.rating))}`:'';
+    const ratingHtml=b.rating?`<span style="color:var(--accent);font-size:0.65rem">${stars}</span> <span style="color:var(--text3)">${b.rating}</span>${b.review_count?` <span style="color:var(--text3);font-size:0.6rem">(${b.review_count})</span>`:''}`:"—";
+    return`<tr onclick="openLeadDetail(${businesses.indexOf(b)})" style="cursor:pointer">
+      <td class="check-cell" onclick="event.stopPropagation()" rowspan="1"><input type="checkbox" class="row-check" ${checked} onchange="toggleRow(${i})"></td>
+      <td><strong>${esc(b.name)}</strong>${b.phone?`<br><span style="font-size:0.65rem;color:var(--text3)">${esc(b.phone)}</span>`:''}</td>
+      <td><span class="quality ${qClass}">${qLabel}</span></td>
+      <td style="font-size:0.72rem">${ratingHtml}</td>
+      <td style="font-size:0.72rem">${esc(b.phone||'')}</td>
+      <td style="font-size:0.72rem">${site}</td>
+      <td style="font-size:0.72rem">${emailDisplay}</td>
+      <td style="font-size:0.68rem;max-width:180px;white-space:normal;line-height:1.4">${contactHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleRow(idx){
+  const f=filteredBusinesses();const b=f[idx];
+  if(b)b.selected_for_apollo=!b.selected_for_apollo;
+  updateSelectedCount();
+}
+function toggleSelectAll(){
+  const on=document.getElementById('selectAllCheck').checked;
+  filteredBusinesses().forEach(b=>b.selected_for_apollo=on);
+  renderTable();updateSelectedCount();
+}
+
+// ── Lead Detail ──────────────────────────────────────────────
+function openLeadDetail(idx){
+  const b=businesses[idx];if(!b)return;
+  const f=(label,val)=>{
+    if(!val)return'';
+    return`<div class="detail-field"><div class="detail-label">${esc(label)}</div><div class="detail-value">${esc(String(val))}</div></div>`;
+  };
+  const fl=(label,val,href)=>{
+    if(!val)return'';
+    return`<div class="detail-field"><div class="detail-label">${esc(label)}</div><div class="detail-value"><a href="${esc(href||val)}" target="_blank">${esc(String(val))}</a></div></div>`;
+  };
+  const qClass=b.site_quality?`q-${b.site_quality.split(':')[0]}`:'';
+  const isFailed=qClass==='q-scrape_failed'||qClass==='q-error';
+  let html=`<div class="detail-header">
+    <div><div class="detail-name">${esc(b.name)}</div>
+    ${b.address?`<div class="detail-url">${esc(b.address)}</div>`:''}
+    ${b.maps_url?`<div class="detail-url"><a href="${esc(b.maps_url)}" target="_blank">View on Google Maps →</a></div>`:''}</div>
+    <div style="display:flex;align-items:center;gap:8px">${isFailed?`<button class="btn btn-sm btn-secondary" onclick="rescanFailed([${idx}])">↻ Rescan</button>`:''}<button class="detail-close" onclick="closeLeadDetail()">✕</button></div>
+  </div>`;
+
+  // Business Info
+  html+=`<div class="detail-section"><div class="detail-section-title">Business</div><div class="detail-grid">`;
+  html+=f('Phone',b.phone);
+  html+=fl('Website',b.website?b.website.replace(/^https?:\/\//,''):null,b.website);
+  html+=f('Rating',b.rating?`${b.rating}${b.review_count?` (${b.review_count} reviews)`:''}`:null);
+  html+=f('Categories',b.types);
+  if(b.site_quality)html+=`<div class="detail-field"><div class="detail-label">Site Quality</div><div class="detail-value"><span class="detail-badge q-${b.site_quality}">${esc(b.site_quality)}</span></div></div>`;
+  html+=f('Emails Found',b.emails);
+  html+=f('Site Phones',b.site_phones);
+  html+=f('Contact Page',b.has_contact_page?'Yes':'No');
+  html+=`</div></div>`;
+
+  // Apollo Org
+  const hasOrg=b.apollo_industry||b.apollo_employees||b.apollo_revenue||b.apollo_founded||b.apollo_city||b.apollo_state||b.apollo_phone||b.apollo_linkedin;
+  if(hasOrg){
+    html+=`<div class="detail-section"><div class="detail-section-title">Apollo — Organization</div><div class="detail-grid">`;
+    html+=f('Industry',b.apollo_industry);
+    html+=f('Employees',b.apollo_employees);
+    html+=f('Revenue',b.apollo_revenue);
+    html+=f('Founded',b.apollo_founded);
+    html+=f('City',b.apollo_city);
+    html+=f('State',b.apollo_state);
+    html+=fl('Apollo Phone',b.apollo_phone);
+    html+=fl('LinkedIn',b.apollo_linkedin);
+    html+=`</div></div>`;
+  }
+
+  // Apollo Contact
+  const hasContact=b.contact_name||b.contact_title||b.contact_email||b.contact_phone||b.contact_linkedin;
+  if(hasContact){
+    html+=`<div class="detail-section"><div class="detail-section-title">Apollo — Contact</div><div class="detail-grid">`;
+    html+=f('Name',b.contact_name);
+    html+=f('Title',b.contact_title);
+    html+=fl('Email',b.contact_email,`mailto:${b.contact_email}`);
+    html+=f('Phone',b.contact_phone);
+    html+=fl('LinkedIn',b.contact_linkedin);
+    html+=`</div></div>`;
+  }
+
+  // Enrichment source
+  if(b.enrichment_source){
+    html+=`<div class="detail-section"><div class="detail-section-title">Data Sources</div><div class="detail-grid">`;
+    html+=f('Source',b.enrichment_source);
+    html+=`</div></div>`;
+  }
+
+  document.getElementById('detailPanel').innerHTML=html;
+  document.getElementById('detailOverlay').classList.add('open');
+}
+function closeLeadDetail(){
+  document.getElementById('detailOverlay').classList.remove('open');
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLeadDetail()});
+
+// ── Rescan Failed ────────────────────────────────────────────
+async function rescanFailed(indices){
+  if(!indices||!indices.length){
+    indices=businesses.reduce((a,b,i)=>{
+      const q=b.site_quality||'';
+      if(q==='scrape_failed'||q==='error'||q.startsWith('error'))a.push(i);
+      return a;
+    },[]);
+    if(!indices.length)return toast('No failed leads to rescan','error');
+  }
+  const r=await fetch('/api/rescan',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({indices})});
+  if(!r.ok){const e=await r.json();toast(e.error||'Rescan failed','error');return}
+  closeLeadDetail();
+  startPolling('enrich');
+  toast(`Rescanning ${indices.length} lead${indices.length>1?'s':''}...`,'info');
+}
+function updateRescanButton(){
+  const failed=businesses.filter(b=>{
+    const q=b.site_quality||'';
+    return q==='scrape_failed'||q==='error'||q.startsWith('error');
+  }).length;
+  const btn=document.getElementById('rescanFailedBtn');
+  if(btn){
+    btn.style.display=failed>0?'':'none';
+    btn.textContent=`↻ Rescan Failed (${failed})`;
+  }
+}
+
+// ── Export ───────────────────────────────────────────────────────
+function exportCsv(){window.location.href='/api/export'}
+function exportJson(){window.location.href='/api/export/json'}
+
+// ── Clear ───────────────────────────────────────────────────────
+async function clearData(){
+  showConfirm(
+    '⚠️ Clear All Data?',
+    'This will permanently delete all scraped businesses, enrichment data, and search results. This action cannot be undone.',
+    'Delete Everything',
+    async ()=>{
+      await fetch('/api/clear',{method:'POST'});
+      businesses=[];refreshTable();toast('Data cleared','success');
+      closeConfirm();
+    }
+  );
+}
+
+// ── Confirm Dialog ─────────────────────────────────────────────
+function showConfirm(title,desc,actionText,callback){
+  document.getElementById('confirmTitle').textContent=title;
+  document.getElementById('confirmDesc').textContent=desc;
+  document.getElementById('confirmAction').textContent=actionText;
+  _confirmCb=callback;
+  document.getElementById('confirmOverlay').classList.add('open');
+}
+function closeConfirm(){
+  document.getElementById('confirmOverlay').classList.remove('open');
+  _confirmCb=null;
+}
+function confirmCallback(){
+  if(_confirmCb)_confirmCb();
+}
+
+// ── Step Locking ────────────────────────────────────────────────
+function updateStepLocking(){
+  const hasBusinesses=businesses.length>0;
+  const hasEnriched=businesses.some(b=>b.site_quality&&b.site_quality!=='scrape_failed'&&!b.site_quality.startsWith('error'));
+
+  // Step 2: locked until scrape done
+  const step2=document.getElementById('step2Card');
+  if(step2){
+    step2.classList.toggle('step-locked',!hasBusinesses);
+    if(hasEnriched)step2.classList.add('step-complete');
+    else step2.classList.remove('step-complete');
+  }
+
+  // Step 3: locked until enrichment done
+  const step3=document.getElementById('step3Card');
+  if(step3){
+    step3.classList.toggle('step-locked',!hasEnriched);
+  }
+
+  // View Results card: visible when data exists
+  const viewResults=document.getElementById('viewResultsCard');
+  if(viewResults){
+    viewResults.style.display=hasBusinesses?'':'none';
+  }
+}
+
+// ── Apollo Search Type Toggle ───────────────────────────────────
+function setApolloSearchType(type){
+  apolloSearchType=type;
+  document.querySelectorAll('.search-toggle-btn').forEach(btn=>{
+    btn.classList.toggle('active',btn.dataset.type===type);
+  });
+  const btnText=document.getElementById('apolloBtnText');
+  const upgradeCta=document.getElementById('apolloUpgradeCta');
+  const keySetup=document.getElementById('apolloKeySetup');
+
+  if(type==='org'){
+    if(btnText)btnText.textContent='Enrich Selected (Org)';
+    if(upgradeCta)upgradeCta.classList.add('hidden');
+    if(keySetup)keySetup.style.display='';
+  }else{
+    if(btnText)btnText.textContent='Find Emails';
+    // Show upgrade CTA for free tier
+    if(tier.tier==='free'){
+      if(upgradeCta)upgradeCta.classList.remove('hidden');
+    }else{
+      if(upgradeCta)upgradeCta.classList.add('hidden');
+    }
+    if(keySetup)keySetup.style.display='';
+  }
+  updateSelectedCount();
+}
+
+// ── Helpers ─────────────────────────────────────────────────────
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function toast(msg,type=''){
+  const el=document.getElementById('toast');el.textContent=msg;
+  el.className='toast show '+type;setTimeout(()=>el.className='toast',3500);
+}
+
+init();
+</script>
+</body>
+</html>
