@@ -1,127 +1,103 @@
 # LeadPipeline
 
-Find local businesses with bad websites, get their contact info, and close more deals.
+A self-hosted tool for finding local business leads. Search Google Places by category and city, enrich each business from its website, check whether it advertises, and export the results to CSV or JSON.
 
-## Quick Start (Ubuntu)
+## Features
 
-Works on Ubuntu 22.04 and later with Python 3.10+.
+- **Business search:** find businesses by category and city with the Google Places API, or look up a known list of companies by name
+- **Website enrichment:** collect emails, phone numbers, and contact pages with Firecrawl
+- **Site quality scoring:** rate each website from `terrible` to `decent`
+- **Ad presence checks:** detect Google Ads activity through the Ads Transparency Center, plus Meta Pixel and Google Ads tags on the homepage
+- **Apollo enrichment (optional):** add company details and decision-maker contacts
+- **Export:** download your leads as CSV or JSON
+
+## Requirements
+
+- Python 3.10 or later
+- A [Google Places API](https://console.cloud.google.com/) key with **Places API (New)** enabled
+- A [Firecrawl](https://firecrawl.dev) API key
+- An [Apollo](https://apollo.io) API key (optional)
+
+These services have their own pricing and free tiers, so check their current rates before running large searches.
+
+## Getting Started
+
+### Ubuntu
 
 ```bash
-# 1. Install system packages
-sudo apt update && sudo apt install -y python3-venv
-
-# 2. Install dependencies into .venv and create .env
+sudo apt update && sudo apt install -y python3-venv git
+git clone https://github.com/SirJipeto/lead-pipeline.git
+cd lead-pipeline
 ./setup.sh
+```
 
-# 3. Edit .env: at minimum set GOOGLE_PLACES_API_KEY and FIRECRAWL_API_KEY
-nano .env
+Add your API keys to `.env`, then start the app:
 
-# 4. Run
+```bash
 ./start.sh
-
-# 5. Open http://localhost:5000
 ```
 
-`start.sh` listens on this machine only. Auth is disabled by default, and with auth off anyone who can reach the app can read your leads and spend your API credits. Set `AUTH_ENABLED=true` in `.env` before setting `HOST=0.0.0.0`.
+Open http://localhost:5000.
 
-To bring leads from another machine, copy your `.env` and `data/` folder into this folder. Neither is in git.
+### Windows
 
-On Windows, run `pip install -r requirements.txt`, then `Start.bat`.
-
-## Architecture
-
-```
-lead-pipeline/
-├── app.py                  # Flask backend (API + auth + billing)
-├── static/
-│   ├── index.html          # Main app UI (pipeline + results)
-│   └── login.html          # Google Sign-In page
-├── landing/
-│   └── index.html          # Marketing landing page
-├── ad_check.py             # Free ad-presence checks
-├── requirements.txt
-├── .env.example
-├── .gitignore
-├── setup.sh                # Ubuntu install
-├── start.sh                # Ubuntu run
-└── README.md
+```bat
+git clone https://github.com/SirJipeto/lead-pipeline.git
+cd lead-pipeline
+pip install -r requirements.txt
+copy .env.example .env
 ```
 
-## How It Works
+Add your API keys to `.env`, then run `Start.bat` and open http://localhost:5000.
 
-1. **Scrape** — Google Places API finds businesses by category and city
-2. **Enrich** — Firecrawl scrapes each website for emails, phones, contact pages
-3. **Review** — Site quality scoring (terrible → decent) tells you who needs help
-4. **Apollo** — Optional second pass for businesses without emails (Pro/Agency tier)
-5. **Export** — Download CSV for cold email outreach
+### Docker
 
-## API Keys Setup
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
 
-### Google Places API
-1. [Google Cloud Console](https://console.cloud.google.com/) → Create project
-2. Enable **Places API (New)**
-3. Create API key under Credentials
-4. Add billing ($200/mo free credits for new accounts)
+## Configuration
 
-### Firecrawl
-1. Sign up at [firecrawl.dev](https://firecrawl.dev)
-2. Copy API key from dashboard
-3. Free tier: 500 credits/month
-
-### Apollo.io (optional)
-1. Sign up at [apollo.io](https://apollo.io)
-2. Settings → Integrations → API key
-3. Free tier: 1,200 exports/year
-
-### Google OAuth (production only)
-1. Google Cloud Console → Credentials → OAuth 2.0 Client ID
-2. Type: Web application
-3. Authorized origins: `https://yourdomain.com`
-4. Redirect URIs: `https://yourdomain.com/auth/google`
-
-### LemonSqueezy (production billing)
-1. Create account at [lemonsqueezy.com](https://lemonsqueezy.com)
-2. Create 3 products (Starter, Pro, Agency)
-3. Copy variant IDs and product IDs to `.env`
-4. Set webhook URL: `https://yourdomain.com/api/webhooks/lemonsqueezy`
-5. Subscribe to events: `subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_expired`
-
-## Environment Variables
+Settings are read from `.env`. See [`.env.example`](.env.example) for the full list.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GOOGLE_PLACES_API_KEY` | Yes | Google Places API key |
 | `FIRECRAWL_API_KEY` | Yes | Firecrawl API key |
-| `APOLLO_OWNER_KEY` | No | Apollo.io API key |
-| `AUTH_ENABLED` | No | `true` to enable login (default: `false`) |
-| `GOOGLE_CLIENT_ID` | If auth | Google OAuth client ID |
-| `FLASK_SECRET` | If auth | Flask session secret |
-| `LEMONSQUEEZY_WEBHOOK_SECRET` | No | Webhook signature verification |
-| `LEMONSQUEEZY_STORE_ID` | No | LemonSqueezy store ID |
-| `LS_*_VARIANT_ID` | No | LemonSqueezy product variant IDs |
-| `LS_*_PRODUCT_ID` | No | LemonSqueezy product IDs |
-| `TARGET_CITY` | No | Default city (default: Las Vegas, NV) |
+| `FIRECRAWL_RPM` | No | Firecrawl requests per minute (default: `28`) |
+| `APOLLO_OWNER_KEY` | No | Apollo API key. You can also add one in the app |
+| `TARGET_CITY` | No | Default search city (default: `Las Vegas, NV`) |
+| `DEFAULT_TIER` | No | Usage limits when login is off: `free`, `starter`, `pro`, or `agency` |
+| `AUTH_ENABLED` | No | Set to `true` to require Google login (default: `false`) |
+| `FLASK_SECRET` | With login | Session secret |
+| `GOOGLE_CLIENT_ID` | With login | Google OAuth client ID |
+| `LEMONSQUEEZY_WEBHOOK_SECRET` | With login | LemonSqueezy webhook signing secret |
 
-## Costs
+`start.sh` also accepts `HOST` and `PORT`.
 
-A typical run costs under $1 in API calls:
+## Security
 
-| Service | 300 businesses | Free tier |
-|---------|---------------|-----------|
-| Google Places | $0.64 | $200/mo credit (new accounts) |
-| Firecrawl | $0 | 500 credits/mo |
-| Apollo | $0 | 1,200/year |
+Login is off by default. While it is off, anyone who can reach the app can view your leads and use your API keys.
 
-## Landing Page
+`start.sh` listens on `127.0.0.1` for this reason. Set `AUTH_ENABLED=true` before exposing the app to a network or the internet with `HOST=0.0.0.0`. `Start.bat` and Docker listen on all network interfaces, so only use them on a network you trust.
 
-The marketing landing page is in `landing/index.html`. Preview:
+## Project Structure
 
-```bash
-cd landing
-python3 -m http.server 8080
-# Open http://localhost:8080
 ```
+├── app.py              # Flask app and API
+├── ad_check.py         # Ad presence checks
+├── static/             # App interface
+├── landing/            # Marketing page
+├── setup.sh            # Ubuntu install
+├── start.sh            # Ubuntu start
+├── Start.bat           # Windows start
+├── Dockerfile
+└── docker-compose.yaml
+```
+
+Your leads, logs, and credit balances are stored in `data/`, which is excluded from git.
 
 ## License
 
-Proprietary. All rights reserved.
+[MIT](LICENSE)
