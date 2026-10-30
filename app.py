@@ -1240,7 +1240,8 @@ def api_enrich():
         return jsonify({"error": "No businesses to enrich. Run scrape first."}), 400
 
     # Count businesses needing enrichment
-    to_enrich_count = sum(1 for b in businesses if b.get("website") and not b.get("site_quality"))
+    pending = [b for b in businesses if b.get("website") and not b.get("site_quality")]
+    to_enrich_count = len(pending)
     if to_enrich_count == 0:
         return jsonify({"error": "All businesses already enriched."}), 400
 
@@ -1258,9 +1259,10 @@ def api_enrich():
         check_ad_presence(enriched, progress_cb=lambda p: set_pipeline_status(
             uid, {"running": True, "step": "enrich", "progress": f"ads {p}", "error": ""}))
         save_businesses(uid, enriched)
-        # Only charge for successfully enriched (not failed/errored)
+        # Only charge for leads enriched in this run (not failed/errored).
+        # enrich_with_firecrawl updates the dicts in `pending` in place.
         enriched_count = sum(
-            1 for b in enriched
+            1 for b in pending
             if b.get("site_quality") and b.get("site_quality") not in ("scrape_failed", "error")
             and not (b.get("site_quality") or "").startswith("error")
         )

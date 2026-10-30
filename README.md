@@ -2,23 +2,31 @@
 
 Find local businesses with bad websites, get their contact info, and close more deals.
 
-## Quick Start (Development)
+## Quick Start (Ubuntu)
+
+Works on Ubuntu 22.04 and later with Python 3.10+.
 
 ```bash
-# 1. Install dependencies
-pip install -r requirements.txt
+# 1. Install system packages
+sudo apt update && sudo apt install -y python3-venv
 
-# 2. Copy env file and add your API keys
-cp .env.example .env
-# Edit .env — at minimum set GOOGLE_PLACES_API_KEY and FIRECRAWL_API_KEY
+# 2. Install dependencies into .venv and create .env
+./setup.sh
 
-# 3. Run
-python app.py
+# 3. Edit .env: at minimum set GOOGLE_PLACES_API_KEY and FIRECRAWL_API_KEY
+nano .env
 
-# 4. Open http://localhost:5000
+# 4. Run
+./start.sh
+
+# 5. Open http://localhost:5000
 ```
 
-Auth is disabled by default in development. Set `AUTH_ENABLED=true` in `.env` to enable Google login.
+`start.sh` listens on this machine only. Auth is disabled by default, and with auth off anyone who can reach the app can read your leads and spend your API credits. Set `AUTH_ENABLED=true` in `.env` before setting `HOST=0.0.0.0`.
+
+To bring leads from another machine, copy your `.env` and `data/` folder into this folder. Neither is in git.
+
+On Windows, run `pip install -r requirements.txt`, then `Start.bat`.
 
 ## Architecture
 
@@ -30,11 +38,12 @@ lead-pipeline/
 │   └── login.html          # Google Sign-In page
 ├── landing/
 │   └── index.html          # Marketing landing page
-├── scraper.py              # CLI version (no web UI needed)
+├── ad_check.py             # Free ad-presence checks
 ├── requirements.txt
 ├── .env.example
 ├── .gitignore
-├── setup.sh
+├── setup.sh                # Ubuntu install
+├── start.sh                # Ubuntu run
 └── README.md
 ```
 
@@ -45,15 +54,6 @@ lead-pipeline/
 3. **Review** — Site quality scoring (terrible → decent) tells you who needs help
 4. **Apollo** — Optional second pass for businesses without emails (Pro/Agency tier)
 5. **Export** — Download CSV for cold email outreach
-
-## Tiers
-
-| | Starter ($29/mo) | Pro ($79/mo) | Agency ($149/mo) |
-|---|---|---|---|
-| Categories/run | 1 | 3 | 5 |
-| Max per category | 20 | 25 | 25 |
-| Apollo enrichment | ✗ | ✓ | ✓ |
-| Monthly runs | 10 | 30 | Unlimited |
 
 ## API Keys Setup
 
@@ -81,7 +81,7 @@ lead-pipeline/
 
 ### LemonSqueezy (production billing)
 1. Create account at [lemonsqueezy.com](https://lemonsqueezy.com)
-2. Create 3 products (Starter $29, Pro $79, Agency $149)
+2. Create 3 products (Starter, Pro, Agency)
 3. Copy variant IDs and product IDs to `.env`
 4. Set webhook URL: `https://yourdomain.com/api/webhooks/lemonsqueezy`
 5. Subscribe to events: `subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_expired`
@@ -92,7 +92,7 @@ lead-pipeline/
 |----------|----------|-------------|
 | `GOOGLE_PLACES_API_KEY` | Yes | Google Places API key |
 | `FIRECRAWL_API_KEY` | Yes | Firecrawl API key |
-| `APOLLO_API_KEY` | No | Apollo.io API key |
+| `APOLLO_OWNER_KEY` | No | Apollo.io API key |
 | `AUTH_ENABLED` | No | `true` to enable login (default: `false`) |
 | `GOOGLE_CLIENT_ID` | If auth | Google OAuth client ID |
 | `FLASK_SECRET` | If auth | Flask session secret |
@@ -118,7 +118,7 @@ The marketing landing page is in `landing/index.html`. Preview:
 
 ```bash
 cd landing
-python -m http.server 8080
+python3 -m http.server 8080
 # Open http://localhost:8080
 ```
 
