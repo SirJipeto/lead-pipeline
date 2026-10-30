@@ -12,12 +12,17 @@ venv/
 
 # Environment
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
+.apollo_key
 
-# Data (runtime)
+# Data (runtime) - lead data must never be committed
 data/
 *.db
+*.csv
+leads*.json
+businesses*.json
+_backup-*
 
 # IDE / tooling
 .vscode/

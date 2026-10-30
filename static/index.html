@@ -1568,6 +1568,19 @@ function openLeadDetail(idx){
   html+=f('Contact Page',b.has_contact_page?'Yes':'No');
   html+=`</div></div>`;
 
+  // Advertising presence (free checks: Google Ads Transparency + site tag sniff)
+  if(b.ads_checked){
+    const yn=v=>v==='yes'?'Yes':v==='no'?'No':v==='check_failed'?'Check failed':null;
+    html+=`<div class="detail-section"><div class="detail-section-title">Advertising</div><div class="detail-grid">`;
+    html+=f('Google Ads',yn(b.advertises_google)?`${yn(b.advertises_google)}${b.advertises_google==='yes'&&b.google_ads_count?` (${b.google_ads_count>=10?'10+':b.google_ads_count} creatives)`:''}`:null);
+    html+=f('Google Advertiser',b.google_advertiser);
+    const advType={'self-managed':'Self-managed','individual':'Individual (likely owner)','agency/parent':'Agency or parent company'}[b.google_advertiser_type];
+    html+=f('Ads Managed By',advType);
+    html+=f('Meta Pixel on Site',yn(b.meta_pixel));
+    html+=f('Google Ads Tag on Site',yn(b.google_ads_tag));
+    html+=`</div></div>`;
+  }
+
   // Apollo Org
   const hasOrg=b.apollo_industry||b.apollo_employees||b.apollo_revenue||b.apollo_founded||b.apollo_city||b.apollo_state||b.apollo_phone||b.apollo_linkedin;
   if(hasOrg){

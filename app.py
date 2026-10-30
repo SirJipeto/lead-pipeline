@@ -12,6 +12,7 @@ import hmac
 import hashlib
 import threading
 import secrets
+from collections import deque
 import requests
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,8 @@ from functools import wraps
 
 from flask import Flask, jsonify, request, send_file, send_from_directory, redirect, url_for, session, g
 from dotenv import load_dotenv
+
+from ad_check import check_ad_presence
 
 load_dotenv()
 
@@ -221,7 +224,7 @@ def log(msg: str):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
     print(line)
-    with open(LOG_FILE, "a") as f:
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(line + "\n")
 
 
@@ -278,7 +281,7 @@ def load_credits(user_id: int) -> dict:
     path = _get_credits_file(user_id)
     tier = get_current_user_tier()
     if path.exists():
-        credits = json.loads(path.read_text())
+        credits = json.loads(path.read_text(encoding="utf-8"))
         credits = _maybe_grant_monthly(credits, tier)
         save_credits(user_id, credits)
         return credits
@@ -290,7 +293,7 @@ def load_credits(user_id: int) -> dict:
 
 def save_credits(user_id: int, credits: dict):
     path = _get_credits_file(user_id)
-    path.write_text(json.dumps(credits, indent=2))
+    path.write_text(json.dumps(credits, indent=2), encoding="utf-8")
 
 
 def check_credits(user_id: int, amount: int, credit_type: str = "credit") -> tuple[bool, str]:
@@ -348,7 +351,7 @@ def load_businesses(user_id: int) -> list[dict]:
     path = get_user_businesses_file(user_id)
     if path.exists():
         try:
-            return json.loads(path.read_text())
+            return json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             pass
     return []
@@ -356,7 +359,10 @@ def load_businesses(user_id: int) -> list[dict]:
 
 def save_businesses(user_id: int, businesses: list[dict]):
     path = get_user_businesses_file(user_id)
-    path.write_text(json.dumps(businesses, indent=2, ensure_ascii=False))
+    # Write to a temp file then replace, so a failed write can't truncate the data
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(businesses, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 # ── Pipeline Status (per-user) ───────────────────────────────────
@@ -415,7 +421,7 @@ def _load_reservoir(user_id: int, cache_key: str) -> dict:
     path = DATA_DIR / str(user_id) / "search_cache" / f"{cache_key}.json"
     if path.exists():
         try:
-            return json.loads(path.read_text())
+            return json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             pass
     return {"businesses": [], "served_ids": [], "passes_completed": 0, "center": None}
@@ -426,7 +432,7 @@ def _save_reservoir(user_id: int, cache_key: str, reservoir: dict):
     cache_dir = DATA_DIR / str(user_id) / "search_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     path = cache_dir / f"{cache_key}.json"
-    path.write_text(json.dumps(reservoir, indent=2))
+    path.write_text(json.dumps(reservoir, indent=2), encoding="utf-8")
 
 
 # Max geographic passes per tier (Pass 1 is always free relevance search)
@@ -446,7 +452,14 @@ GEO_OFFSETS = [
 
 
 def scrape_google_places(categories: list[str], max_per: int, city: str,
-                         user_id: int = 0, tier: str = "free") -> list[dict]:
+                         user_id: int = 0, tier: str = "free",
+                         single_shot: bool = False) -> list[dict]:
+    """Search Google Places.
+
+    single_shot mode is for looking up companies you already know by name:
+    one API call per query, no pagination, no geographic expansion. The
+    default discovery mode casts a wide net and costs up to 7 calls per query.
+    """
     api_key = os.getenv("GOOGLE_PLACES_API_KEY")
     if not api_key:
         raise ValueError("GOOGLE_PLACES_API_KEY not set in .env")
@@ -459,17 +472,18 @@ def scrape_google_places(categories: list[str], max_per: int, city: str,
             "places.displayName,places.formattedAddress,"
             "places.nationalPhoneNumber,places.websiteUri,"
             "places.rating,places.userRatingCount,places.googleMapsUri,"
-            "places.businessStatus,places.types,places.id,places.location"
+            "places.businessStatus,places.types,places.id,places.location,"
+            "places.regularOpeningHours"
         ),
     }
 
-    max_passes = TIER_MAX_PASSES.get(tier, 1)
+    max_passes = 1 if single_shot else TIER_MAX_PASSES.get(tier, 1)
 
     def _do_search(query, extra_body=None):
         """Execute a single paginated search, return list of places."""
         results = []
         is_distance = extra_body and extra_body.get("rankPreference") == "DISTANCE"
-        max_pages = 1 if is_distance else 3
+        max_pages = 1 if (is_distance or single_shot) else 3
         page_token = None
         
         for _ in range(max_pages):
@@ -494,6 +508,7 @@ def scrape_google_places(categories: list[str], max_per: int, city: str,
                 if not name:
                     continue
                 loc = place.get("location", {})
+                oh = place.get("regularOpeningHours", {})
                 results.append({
                     "name": name, "address": place.get("formattedAddress", ""),
                     "phone": place.get("nationalPhoneNumber", ""),
@@ -502,6 +517,8 @@ def scrape_google_places(categories: list[str], max_per: int, city: str,
                     "review_count": place.get("userRatingCount", 0),
                     "maps_url": place.get("googleMapsUri", ""),
                     "status": place.get("businessStatus", ""),
+                    "hours": " | ".join(oh.get("weekdayDescriptions", [])),
+                    "open_now": oh.get("openNow", ""),
                     "types": ", ".join(place.get("types", [])),
                     "place_id": place.get("id", ""),
                     "lat": loc.get("latitude", 0),
@@ -643,6 +660,47 @@ def _assess_quality(content: str, emails: set, has_contact: bool) -> str:
     return "decent"
 
 
+# Firecrawl plan allows 30 req/min; stay a little under to absorb clock drift
+FIRECRAWL_RPM = int(os.getenv("FIRECRAWL_RPM", "28"))
+
+
+class _RateLimiter:
+    """Blocks so at most `rpm` requests start in any rolling 60s window."""
+
+    def __init__(self, rpm: int):
+        self.rpm = rpm
+        self.stamps = deque()
+
+    def wait(self):
+        while True:
+            now = time.monotonic()
+            while self.stamps and now - self.stamps[0] >= 60:
+                self.stamps.popleft()
+            if len(self.stamps) < self.rpm:
+                break
+            time.sleep(60 - (now - self.stamps[0]) + 0.1)
+        self.stamps.append(time.monotonic())
+
+
+def _is_rate_limit_error(e: Exception) -> bool:
+    msg = str(e).lower()
+    return "429" in msg or "rate limit" in msg
+
+
+def _fc_scrape(fc, limiter: "_RateLimiter", url: str, max_attempts: int = 3):
+    """Rate-limited fc.scrape. Waits out 429s instead of failing the business."""
+    for attempt in range(max_attempts):
+        limiter.wait()
+        try:
+            return fc.scrape(url, formats=["markdown"])
+        except Exception as e:
+            if _is_rate_limit_error(e) and attempt < max_attempts - 1:
+                log(f"  Firecrawl rate limited, waiting 65s (attempt {attempt + 1})")
+                time.sleep(65)
+                continue
+            raise
+
+
 def enrich_with_firecrawl(businesses: list[dict], user_id: int) -> list[dict]:
     api_key = os.getenv("FIRECRAWL_API_KEY")
     if not api_key:
@@ -650,6 +708,7 @@ def enrich_with_firecrawl(businesses: list[dict], user_id: int) -> list[dict]:
 
     from firecrawl import FirecrawlApp
     fc = FirecrawlApp(api_key=api_key)
+    limiter = _RateLimiter(FIRECRAWL_RPM)
 
     to_enrich = [b for b in businesses if b.get("website") and not b.get("site_quality")]
     log(f"Firecrawl: enriching {len(to_enrich)} businesses")
@@ -661,7 +720,7 @@ def enrich_with_firecrawl(businesses: list[dict], user_id: int) -> list[dict]:
         })
         url = biz["website"]
         try:
-            result = fc.scrape(url, formats=["markdown"])
+            result = _fc_scrape(fc, limiter, url)
             if not result or not getattr(result, "markdown", None):
                 biz.update({"site_quality": "scrape_failed", "enrichment_source": "firecrawl_failed"})
                 continue
@@ -675,7 +734,7 @@ def enrich_with_firecrawl(businesses: list[dict], user_id: int) -> list[dict]:
             has_contact = bool(contact_urls)
             if contact_urls and not emails:
                 try:
-                    cc = fc.scrape(contact_urls[0], formats=["markdown"])
+                    cc = _fc_scrape(fc, limiter, contact_urls[0])
                     if cc and getattr(cc, "markdown", None):
                         emails.update(EMAIL_RE.findall(cc.markdown))
                         all_text += " " + cc.markdown
@@ -691,7 +750,6 @@ def enrich_with_firecrawl(businesses: list[dict], user_id: int) -> list[dict]:
         except Exception as e:
             log(f"  Firecrawl error for {biz['name']}: {e}")
             biz.update({"site_quality": "error", "enrichment_source": "firecrawl_error"})
-        time.sleep(0.5)
     log("Firecrawl complete")
     return businesses
 
@@ -1052,7 +1110,7 @@ def save_apollo_key():
     if not key:
         return jsonify({"error": "API key required"}), 400
     path = _get_apollo_key_path(uid)
-    path.write_text(key)
+    path.write_text(key, encoding="utf-8")
     return jsonify({"ok": True})
 
 @app.route("/api/settings/apollo-key", methods=["DELETE"])
@@ -1109,6 +1167,68 @@ def api_scrape():
     return jsonify({"ok": True, "message": "Scrape started"})
 
 
+@app.route("/api/scrape-list", methods=["POST"])
+@require_auth
+def api_scrape_list():
+    """Look up a known list of companies by name, one Places call each.
+
+    Body: {"queries": "Name One, City, ST\\nName Two, City, ST", "top_n": 1}
+
+    Unlike /api/scrape this is not a discovery search: you already know who
+    you are looking for, so there is no category cap, no pagination and no
+    geographic expansion. Cost is one Places call per line.
+    """
+    uid = get_current_user_id()
+    tier = get_current_user_tier()
+
+    if get_pipeline_status(uid).get("running"):
+        return jsonify({"error": "Pipeline already running"}), 400
+
+    data = request.json or {}
+    raw = data.get("queries") or ""
+    if isinstance(raw, list):
+        lines = [str(q).strip() for q in raw]
+    else:
+        lines = [ln.strip() for ln in raw.splitlines()]
+    # Drop blanks and comment lines so a queries .txt file can be posted as-is
+    queries = [ln for ln in lines if ln and not ln.startswith("#")]
+    if not queries:
+        return jsonify({"error": "No queries provided"}), 400
+
+    can_afford, msg = check_credits(uid, len(queries))
+    if not can_afford:
+        return jsonify({"error": msg}), 429
+
+    # scrape_google_places runs .format(city=...) on each query, which raises
+    # on any literal brace in a company name. Escape them.
+    categories = [q.replace("{", "{{").replace("}", "}}") for q in queries]
+    top_n = max(1, min(int(data.get("top_n", 1)), 5))
+
+    def do_scrape():
+        set_pipeline_status(uid, {"running": True, "step": "scrape",
+                                  "progress": f"0/{len(categories)}", "error": ""})
+        new_businesses = scrape_google_places(categories, top_n, "", user_id=uid,
+                                              tier=tier, single_shot=True)
+        existing = load_businesses(uid)
+        before_count = len(existing)
+        existing_ids = {b.get("place_id") for b in existing if b.get("place_id")}
+        merged = _dedup(existing + new_businesses)
+        actually_new = len(merged) - before_count
+        for b in merged:
+            if b.get("place_id") and b["place_id"] not in existing_ids:
+                b["selected_for_apollo"] = True
+        save_businesses(uid, merged)
+        if actually_new > 0:
+            deduct_credits(uid, actually_new)
+        log(f"List scrape complete: {len(queries)} queries, "
+            f"{len(new_businesses)} matched, {actually_new} new")
+        track_usage(uid, "scrape", businesses=actually_new, credits_used=actually_new)
+
+    run_in_background(do_scrape, uid)
+    return jsonify({"ok": True, "queries": len(queries),
+                    "message": f"List scrape started ({len(queries)} lookups)"})
+
+
 @app.route("/api/enrich", methods=["POST"])
 @require_auth
 def api_enrich():
@@ -1132,6 +1252,11 @@ def api_enrich():
     def do_enrich():
         set_pipeline_status(uid, {"running": True, "step": "enrich", "progress": "starting...", "error": ""})
         enriched = enrich_with_firecrawl(businesses, uid)
+        save_businesses(uid, enriched)
+        # Free ad-presence checks (Google Ads Transparency + site tag sniff) — no credits
+        set_pipeline_status(uid, {"running": True, "step": "enrich", "progress": "checking ad presence...", "error": ""})
+        check_ad_presence(enriched, progress_cb=lambda p: set_pipeline_status(
+            uid, {"running": True, "step": "enrich", "progress": f"ads {p}", "error": ""}))
         save_businesses(uid, enriched)
         # Only charge for successfully enriched (not failed/errored)
         enriched_count = sum(
@@ -1219,7 +1344,7 @@ def api_apollo():
         api_key = APOLLO_OWNER_KEY
         key_path = _get_apollo_key_path(uid)
         if key_path.exists():
-            api_key = key_path.read_text().strip()
+            api_key = key_path.read_text(encoding="utf-8").strip()
         if not api_key:
             return jsonify({"error": "Apollo not configured. Contact support."}), 500
     else:
@@ -1242,7 +1367,7 @@ def api_apollo():
                 return jsonify({"error": "Apollo not configured. Contact support."}), 500
         elif has_byok:
             # Use their own key — no Apollo credit deduction
-            api_key = key_path.read_text().strip()
+            api_key = key_path.read_text(encoding="utf-8").strip()
         else:
             return jsonify({
                 "error": "No Apollo credits remaining. Add your own Apollo API key or sign up for free credits at apollo.io",
@@ -1299,7 +1424,10 @@ def api_export():
     csv_path.parent.mkdir(exist_ok=True)
     columns = [
         "name", "address", "phone", "website", "rating", "review_count",
+        "hours", "status", "place_id",
         "emails", "site_phones", "site_quality", "has_contact_page",
+        "advertises_google", "google_advertiser", "google_advertiser_type",
+        "meta_pixel", "google_ads_tag",
         "types", "enrichment_source", "maps_url",
         "apollo_industry", "apollo_employees", "apollo_revenue", "apollo_founded",
         "apollo_linkedin", "apollo_phone",
@@ -1321,7 +1449,7 @@ def api_export_json():
         return jsonify({"error": "No data to export"}), 400
     json_path = DATA_DIR / str(uid) / "leads.json"
     json_path.parent.mkdir(exist_ok=True)
-    json_path.write_text(json.dumps(businesses, indent=2, ensure_ascii=False))
+    json_path.write_text(json.dumps(businesses, indent=2, ensure_ascii=False), encoding="utf-8")
     return send_file(json_path, as_attachment=True, download_name="leads.json")
 
 
@@ -1338,7 +1466,7 @@ def api_clear():
 @require_auth
 def api_log():
     if LOG_FILE.exists():
-        lines = LOG_FILE.read_text().strip().split("\n")
+        lines = LOG_FILE.read_text(encoding="utf-8", errors="replace").strip().split("\n")
         return jsonify(lines[-100:])
     return jsonify([])
 
